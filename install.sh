@@ -92,6 +92,17 @@ main() {
 
   ln -sfn "$version" "$lib_dir/current"
   ln -sfn "$lib_dir/current/k3dlamp" "$bin_dir/k3dlamp"
+
+  # Headlamp only notices plugins installed from the catalog in a user-plugins
+  # folder that existed at launch, so create it now; otherwise the k3d plugin
+  # appears only after a restart. Headlamp uses the data folder when it exists.
+  local data_dir="${XDG_DATA_HOME:-$HOME/.local/share}/k3dlamp"
+  local config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/k3dlamp"
+  if [ -d "$data_dir" ]; then
+    mkdir -p "$data_dir/user-plugins"
+  else
+    mkdir -p "$config_dir/user-plugins"
+  fi
   local old
   for old in "$lib_dir"/*; do
     case "$(basename "$old")" in

@@ -1,12 +1,12 @@
 /**
- * Drives the installed k3dlamp build through the k3d plugin's whole job:
- * notice k3d is missing, find it once installed, create a cluster, operate it
- * from Headlamp, and delete it. run.sh installs the build with install.sh and
- * provides a private Docker daemon.
+ * Drives the installed k3dlamp build through the k3d plugin's whole job: install
+ * the plugin from Artifact Hub, notice k3d is missing, find it once installed,
+ * create a cluster, operate it from the app, and delete it. run.sh installs the
+ * build with install.sh and provides a private Docker daemon. The plugin comes
+ * from the live store, so these specs need network access.
  */
 import { _electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -15,6 +15,8 @@ const headlamp = process.env.HEADLAMP_BIN ?? path.join(os.homedir(), '.local/bin
 // The installer links the binary into bin/; its resources sit beside the real file.
 const resources = path.join(path.dirname(fs.realpathSync(headlamp)), 'resources');
 const product = '/product';
+const store = { repository: 'bitswalk', package: 'k3dlamp-k3d-plugin' };
+const pluginIdentity = '@bitswalk/headlamp-k3d@k3dlamp-k3d-plugin';
 const k3dRelease = '/opt/k3d';
 const k3dOnPath = '/usr/local/bin/k3d';
 const clusterConfig = '/fixtures/dev-cluster.yaml';
@@ -25,7 +27,16 @@ let app: ElectronApplication;
 let page: Page;
 const mainLog: string[] = [];
 
-const sha256 = (file: string) => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+interface Prompt {
+  modal: boolean;
+  title?: string;
+  detail?: string;
+}
+
+/** Native dialogs the app showed, answered with their first button (Yes, Allow). */
+function prompts(): Promise<Prompt[]> {
+  return app.evaluate(() => (globalThis as any).e2ePrompts);
+}
 
 async function screenshot(name: string) {
   await page.screenshot({ path: path.join(results, 'screens', `${name}.png`) });
@@ -55,6 +66,23 @@ test.beforeAll(async () => {
   });
   app.process().stdout?.on('data', chunk => mainLog.push(String(chunk)));
   app.process().stderr?.on('data', chunk => mainLog.push(String(chunk)));
+  // Native dialogs can't be clicked from Playwright, so answer them in the
+  // main process the way a user accepting them would, and record each one.
+  await app.evaluate(({ dialog }) => {
+    const shown: Prompt[] = ((globalThis as any).e2ePrompts = []);
+    const record = (modal: boolean, args: any[]) => {
+      const { title, detail } = args[args.length - 1];
+      shown.push({ modal, title, detail });
+    };
+    dialog.showMessageBox = (async (...args: any[]) => {
+      record(false, args);
+      return { response: 0, checkboxChecked: false };
+    }) as typeof dialog.showMessageBox;
+    dialog.showMessageBoxSync = ((...args: any[]) => {
+      record(true, args);
+      return 0;
+    }) as typeof dialog.showMessageBoxSync;
+  });
   page = await app.firstWindow();
 });
 
@@ -63,20 +91,11 @@ test.afterAll(async () => {
   fs.writeFileSync(path.join(results, 'headlamp-main.log'), mainLog.join(''));
 });
 
-test('ships the product manifest and the k3d plugin', () => {
+test('ships the product manifest and the Plugin Catalog, not the k3d plugin', () => {
   expect(fs.readFileSync(path.join(resources, 'app-build-manifest.json'), 'utf8')).toBe(
     fs.readFileSync(path.join(product, 'app-build-manifest.json'), 'utf8')
   );
-
-  const archive = fs.readdirSync(path.join(product, 'plugins')).find(f => f.endsWith('.tar.gz'));
-  const unpacked = fs.mkdtempSync(path.join(os.tmpdir(), 'plugin-'));
-  execFileSync('tar', ['-xzf', path.join(product, 'plugins', archive!), '-C', unpacked]);
-  const [bundle] = fs.readdirSync(unpacked);
-  for (const file of ['main.js', 'package.json']) {
-    expect(sha256(path.join(resources, '.plugins/headlamp-k3d', file))).toBe(
-      sha256(path.join(unpacked, bundle, file))
-    );
-  }
+  expect(fs.readdirSync(path.join(resources, '.plugins'))).toEqual(['plugin-catalog']);
 });
 
 test('runs as k3dlamp, apart from any Headlamp install', async () => {
@@ -87,13 +106,34 @@ test('runs as k3dlamp, apart from any Headlamp install', async () => {
   expect(identity).toEqual({ name: 'k3dlamp', userData: path.join(os.homedir(), '.config/k3dlamp') });
 });
 
+test('installs the k3d plugin from Artifact Hub through the Plugin Catalog', async () => {
+  test.setTimeout(5 * 60_000);
+  await go(`/plugin-catalog/${store.repository}/${store.package}`);
+  const install = page.getByRole('button', { name: 'Install', exact: true });
+  await expect(install).toBeVisible({ timeout: 120_000 });
+  await screenshot('0-store-listing');
+  await install.click();
+  await page.getByRole('button', { name: 'Reload Now' }).click({ timeout: 180_000 });
+  await expect(
+    page
+      .getByRole('navigation', { name: 'Navigation' })
+      .getByRole('button', { name: 'k3d', exact: true })
+  ).toBeVisible({ timeout: 120_000 });
+
+  const installs = (await prompts()).filter(p => p.title === 'Plugin Installation');
+  expect(installs).toHaveLength(1);
+  expect(installs[0].detail).toContain(
+    'https://github.com/bitswalk/k3dlamp-k3d-plugin/releases/download/'
+  );
+});
+
 test('says when k3d is not installed', async () => {
   await page
     .getByRole('navigation', { name: 'Navigation' })
     .getByRole('button', { name: 'k3d', exact: true })
     .click({ timeout: 120_000 });
   await expect(
-    page.getByText('k3d is not installed, or not on the PATH k3dlamp was started with.')
+    page.getByText('k3d is not installed, or not on the PATH this app was started with.')
   ).toBeVisible();
   await screenshot('1-k3d-missing');
 });
@@ -131,12 +171,10 @@ test('shows k3dlamp branding, not Headlamp, in light and dark themes', async () 
   await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
 });
 
-test('finds k3d once installed, with no consent prompt', async () => {
+test('finds k3d once installed', async () => {
   fs.copyFileSync(k3dRelease, k3dOnPath);
   fs.chmodSync(k3dOnPath, 0o755);
 
-  // A consent prompt is a modal native dialog that blocks Electron's main
-  // process, so this would time out if approvedCommands were not honoured.
   await page.getByRole('button', { name: 'Retry' }).click();
   await expect(noClusters()).toBeVisible();
   await screenshot('2-k3d-ready');
@@ -212,4 +250,15 @@ test('refuses k3d to renderer code that lacks the plugin capability', async () =
   );
   // Negative codes come from Headlamp's main process: no k3d process was started.
   expect(exitCode).toBeLessThan(0);
+});
+
+test('asked consent once for each of the three commands', async () => {
+  // The user location can't pre-approve commands, so each grant prompts on
+  // first use; the saved answer covers every later run.
+  const consent = (await prompts()).filter(p => p.modal).map(p => p.detail);
+  expect(consent).toEqual([
+    `${pluginIdentity}: k3d cluster list -o json`,
+    `${pluginIdentity}: k3d cluster create --config`,
+    `${pluginIdentity}: k3d cluster delete`,
+  ]);
 });

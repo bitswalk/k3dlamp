@@ -1,6 +1,6 @@
 # k3dlamp
 
-A Headlamp Desktop build that creates and operates k3d clusters. It is upstream Headlamp, built from a pinned commit with this repository's product manifest, bitswalk branding, and the [k3d plugin](https://github.com/bitswalk/k3dlamp-k3d-plugin).
+A Headlamp Desktop build that creates and operates k3d clusters. It is upstream Headlamp, built from a pinned commit with this repository's product manifest and bitswalk branding. The manifest lets the [k3d plugin](https://github.com/bitswalk/k3dlamp-k3d-plugin), which users install from Artifact Hub, run k3d.
 
 Open **k3d** in the sidebar, give it the path of a k3d config file, and click **Create**. The cluster appears in the cluster list as `k3d-<name>`, ready to browse like any other cluster.
 
@@ -18,7 +18,15 @@ To create clusters, k3dlamp needs Docker and [k3d](https://k3d.io) on `PATH`. It
 
 On distributions that restrict unprivileged user namespaces, including Ubuntu 24.04 and later, Chromium's sandbox needs its setuid helper. The installer never runs anything as root. Instead it prints the two `sudo` commands to run once per installed version.
 
-To uninstall, which leaves your settings in `~/.config/k3dlamp`:
+Then install the k3d plugin from inside k3dlamp. This step needs internet access:
+
+1. Open **Plugin Catalog** in the sidebar.
+2. Turn off **Only official** and **Only verified**, then search for `k3dlamp`. Artifact Hub doesn't list the plugin as official.
+3. Open **k3d for k3dlamp**, click **Install**, confirm, and click **Reload Now**.
+
+The first time the plugin lists, creates or deletes clusters, k3dlamp asks you to allow that command. It remembers each answer.
+
+To uninstall, which leaves your settings and installed plugins in `~/.config/k3dlamp`:
 
 ```bash
 curl -fsSL https://github.com/bitswalk/k3dlamp/releases/latest/download/install.sh | bash -s -- --uninstall
@@ -32,8 +40,9 @@ The build makes two kinds of change. Branding replaces Headlamp's logo, icons, c
 | --- | --- |
 | `product` | Runs as `k3dlamp`, with settings in `~/.config/k3dlamp` and the `k3dlamp://` URL scheme, so it can sit next to a Headlamp install |
 | `checkForUpdates: false` | Never points users at upstream Headlamp releases |
-| `plugins` | Ships the k3d plugin archive in `plugins/`, pinned by SHA-256, and none of Headlamp's default plugins |
-| `runCommands` | Lets that plugin run three k3d commands, listed below |
+| `plugins` | Ships Headlamp's Plugin Catalog, downloaded at build time and pinned by SHA-256, and none of Headlamp's other default plugins |
+| `proxy-urls` | Lets the catalog reach Artifact Hub |
+| `runCommands` | Lets the k3d plugin, installed from Artifact Hub, run three k3d commands, listed below |
 
 The manifest replaces Headlamp's default manifest completely, so it is the whole command policy:
 
@@ -43,7 +52,7 @@ The manifest replaces Headlamp's default manifest completely, so it is the whole
 | `k3d cluster create --config <path>` | Prefix |
 | `k3d cluster delete <name>` | Prefix |
 
-The shipped policy pre-approves the three commands, so the packaged app never shows Headlamp's consent prompt. The development policy keeps the prompt.
+The packaged app grants them only to the plugin that Headlamp's plugin manager installed from the Artifact Hub package `bitswalk/k3dlamp-k3d-plugin`. Headlamp checks that against the installation receipt it wrote, not against the plugin's own files. Headlamp doesn't let a policy for store-installed plugins pre-approve commands, so each of the three asks for consent once. The development policy grants the same commands to a locally built copy; see the plugin's README.
 
 The grants need Headlamp's `runCommands`, which is on `main` but in no release yet; v0.45.0 is the latest. `build/headlamp.Dockerfile` pins commit `032c275fcd3c0301bf03f46c097f012237780d0c`.
 
@@ -63,15 +72,19 @@ Needs only Docker. Both steps run in containers.
 
 `test-headlamp.sh` installs that build with `install.sh` and drives it with Playwright under Xvfb. The specs check, in order, that:
 
-1. The package holds this manifest and the plugin, byte for byte.
+1. The package holds this manifest and ships only the Plugin Catalog.
 2. The app runs as `k3dlamp`, with its settings in `~/.config/k3dlamp`.
-3. The plugin reports k3d missing.
-4. In light and dark themes, the k3d, home and settings pages show the bitswalk logo, a window title ending in `k3dlamp`, the bitswalk red selection, and no "Headlamp" text.
-5. After k3d is copied onto `PATH`, **Retry** finds it with no consent prompt.
-6. **Create** brings up `dev` from `examples/dev-cluster.yaml`, and `k3d-dev` appears in the app.
-7. The app lists the new cluster's node and pods.
-8. **Delete** removes the cluster and its kubeconfig context.
-9. Renderer code without the plugin's capability cannot run k3d.
+3. The Plugin Catalog installs the k3d plugin from Artifact Hub, after one install confirmation.
+4. The plugin reports k3d missing.
+5. In light and dark themes, the k3d, home and settings pages show the bitswalk logo, a window title ending in `k3dlamp`, the bitswalk red selection, and no "Headlamp" text.
+6. After k3d is copied onto `PATH`, **Retry** finds it.
+7. **Create** brings up `dev` from `examples/dev-cluster.yaml`, and `k3d-dev` appears in the app.
+8. The app lists the new cluster's node and pods.
+9. **Delete** removes the cluster and its kubeconfig context.
+10. Renderer code without the plugin's capability cannot run k3d.
+11. The app asked consent exactly once for each of the three k3d commands.
+
+The specs answer the native install and consent dialogs as a user accepting them would, and record each one. Step 3 installs from the live Artifact Hub, so the tests need internet access.
 
 The test container runs privileged because it starts its own Docker daemon for k3d, so test clusters never touch the host's Docker. Screenshots, logs and an HTML report land in `out/e2e/`.
 
@@ -100,15 +113,11 @@ docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD/branding:/brand
   sh -c 'pip install -q --user pillow==11.3.0 fonttools==4.60.1 brotli==1.1.0 && python /branding/generate.py /font/latin.woff2'
 ```
 
-## Update the plugin
+## The k3d plugin
 
-Pin a [plugin release](https://github.com/bitswalk/k3dlamp-k3d-plugin/releases) by its tag. The script checks the archive against the release's `SHA256SUMS`, replaces the copy in `plugins/`, and updates the manifest:
+k3dlamp doesn't carry the plugin. Each plugin release publishes itself on Artifact Hub, and users install or update it from the Plugin Catalog. Nothing here needs to change for a new plugin version, unless the plugin needs different commands.
 
-```bash
-./scripts/update-plugin.sh v0.1.0
-```
-
-Commit the archive and the manifest together.
+The `runCommands` policy pins the plugin's Artifact Hub package and repository IDs, as well as their names. That keeps the grant with this package even if a repository of the same name is deleted and recreated by someone else.
 
 ## Release
 

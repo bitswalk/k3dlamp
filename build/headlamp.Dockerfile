@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Builds Headlamp Desktop for Linux x64 from a pinned Headlamp commit, branded
-# as k3dlamp, with this product's app-build-manifest.json and the k3d plugin
-# archive it ships.
+# as k3dlamp, with this product's app-build-manifest.json. The k3d plugin isn't
+# part of the build: users install it from Artifact Hub.
 #
 #   docker build -f build/headlamp.Dockerfile --output out .
 #
@@ -21,7 +21,7 @@ RUN git init -q . \
  && git fetch -q --depth 1 origin "$HEADLAMP_COMMIT" \
  && git checkout -q FETCH_HEAD
 
-# Dependencies come before the product files, so a plugin change reuses them.
+# Dependencies come before the product files, so a manifest change reuses them.
 RUN cd backend && go mod download
 RUN cd frontend && npm ci --no-audit --no-fund
 RUN cd app && npm ci --no-audit --no-fund
@@ -32,7 +32,6 @@ COPY branding/overlay/ /product/branding/overlay/
 RUN /product/branding/apply.sh /src/headlamp
 
 COPY app-build-manifest.json /product/
-COPY plugins/*.tar.gz /product/plugins/
 ENV HEADLAMP_BUILD_MANIFEST=/product/app-build-manifest.json \
     HEADLAMP_SOURCE_COMMIT=$HEADLAMP_COMMIT
 

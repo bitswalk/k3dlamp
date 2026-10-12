@@ -5,17 +5,18 @@
     "name": "k3dlamp",
     "productName": "k3dlamp",
     "companyName": "bitswalk",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "appId": "com.github.bitswalk.k3dlamp",
     "protocols": { "name": "k3dlamp-protocol", "schemes": ["k3dlamp"] }
   },
   "checkForUpdates": false,
+  "proxy-urls": ["https://artifacthub.io/*"],
   "plugins": [
     {
-      "name": "headlamp-k3d",
-      "packageName": "@bitswalk/headlamp-k3d",
-      "file": "./plugins/bitswalk-headlamp-k3d-0.1.1.tar.gz",
-      "sha256": "4848ba05456565431404cb104c47a1b2fa94128deb4007a48c2d4530ba597e75"
+      "name": "plugin-catalog",
+      "packageName": "@headlamp-k8s/plugin-catalog",
+      "archive": "https://github.com/headlamp-k8s/plugins/releases/download/plugin-catalog-0.4.4/headlamp-k8s-plugin-catalog-0.4.4.tar.gz",
+      "sha256": "03bf713e4b4acb790fc2f10dcb985c9a66ce8c0828c69ffddcfb476aa28470fb"
     }
   ],
   "commandSets": {
@@ -28,14 +29,17 @@
   "runCommands": [
     {
       "environment": "production",
-      "pluginLocation": "shipped",
-      "plugins": [{ "bundleName": "headlamp-k3d", "packageName": "@bitswalk/headlamp-k3d" }],
-      "commandSets": ["k3d"],
-      "approvedCommands": [
-        { "tool": "k3d", "args": ["cluster", "list", "-o", "json"] },
-        { "tool": "k3d", "args": ["cluster", "create", "--config"], "allowTrailingArgs": true },
-        { "tool": "k3d", "args": ["cluster", "delete"], "allowTrailingArgs": true }
-      ]
+      "pluginLocation": "user",
+      "plugins": [
+        {
+          "bundleName": "k3dlamp-k3d-plugin",
+          "packageName": "@bitswalk/headlamp-k3d",
+          "artifactHubPackage": "bitswalk/k3dlamp-k3d-plugin",
+          "artifactHubPackageId": "682daae3-a51b-4b70-b7e3-8fd17aa040b6",
+          "artifactHubRepositoryId": "4be0b5a4-e498-41c8-849f-dd394bbe51a6"
+        }
+      ],
+      "commandSets": ["k3d"]
     },
     {
       "environment": "development",

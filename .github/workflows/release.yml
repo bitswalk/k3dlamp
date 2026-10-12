@@ -54,8 +54,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           headlamp_commit="$(sed -n 's/^ARG HEADLAMP_COMMIT=//p' build/headlamp.Dockerfile)"
-          plugin_file="$(jq -r '.plugins[0].file' app-build-manifest.json)"
-          plugin_digest="$(jq -r '.plugins[0].sha256' app-build-manifest.json)"
+          catalog="$(jq -r '.plugins[] | select(.name == "plugin-catalog") | .archive' app-build-manifest.json)"
           cat >notes.md <<EOF
           Install or upgrade for the current user:
 
@@ -63,12 +62,13 @@ jobs:
           curl -fsSL https://github.com/bitswalk/k3dlamp/releases/download/$GITHUB_REF_NAME/install.sh | bash
           \`\`\`
 
-          Requires Linux x86_64, with Docker and k3d on \`PATH\` to create clusters.
+          Then install the k3d plugin from **Plugin Catalog** in the sidebar, as the [README](https://github.com/bitswalk/k3dlamp#install) describes. Requires Linux x86_64, with Docker and k3d on \`PATH\` to create clusters.
 
-          | Component | Pinned to |
+          | Component | Source |
           | --- | --- |
-          | Headlamp | [\`${headlamp_commit:0:12}\`](https://github.com/kubernetes-sigs/headlamp/commit/$headlamp_commit) |
-          | k3d plugin | \`$(basename "$plugin_file")\`, SHA-256 \`$plugin_digest\` |
+          | Headlamp | Commit [\`${headlamp_commit:0:12}\`](https://github.com/kubernetes-sigs/headlamp/commit/$headlamp_commit) |
+          | Plugin Catalog | Shipped: \`$(basename "$catalog")\` |
+          | k3d plugin | Installed by users from [Artifact Hub](https://artifacthub.io/packages/headlamp/bitswalk/k3dlamp-k3d-plugin) |
           EOF
           gh release create "$GITHUB_REF_NAME" dist/* \
             --title "k3dlamp $GITHUB_REF_NAME" --notes-file notes.md --verify-tag
