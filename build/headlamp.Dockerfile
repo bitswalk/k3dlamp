@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
-# Builds Headlamp Desktop for Linux x64 from a pinned Headlamp commit, with this
-# product's app-build-manifest.json and the k3d plugin archive it ships.
+# Builds Headlamp Desktop for Linux x64 from a pinned Headlamp commit, branded
+# as k3dlamp, with this product's app-build-manifest.json and the k3d plugin
+# archive it ships.
 #
 #   docker build -f build/headlamp.Dockerfile --output out .
 #
@@ -25,6 +26,10 @@ RUN cd backend && go mod download
 RUN cd frontend && npm ci --no-audit --no-fund
 RUN cd app && npm ci --no-audit --no-fund
 RUN make backend
+
+COPY branding/apply.sh /product/branding/
+COPY branding/overlay/ /product/branding/overlay/
+RUN /product/branding/apply.sh /src/headlamp
 
 COPY app-build-manifest.json /product/
 COPY plugins/*.tar.gz /product/plugins/

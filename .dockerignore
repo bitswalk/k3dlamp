@@ -1,6 +1,8 @@
 # Only what the build and e2e images copy.
 *
 !app-build-manifest.json
+!branding/apply.sh
+!branding/overlay/
 !plugins/*.tar.gz
 !install.sh
 !examples/dev-cluster.yaml

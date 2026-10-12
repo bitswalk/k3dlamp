@@ -93,9 +93,42 @@ test('says when k3d is not installed', async () => {
     .getByRole('button', { name: 'k3d', exact: true })
     .click({ timeout: 120_000 });
   await expect(
-    page.getByText('k3d is not installed, or not on the PATH Headlamp was started with.')
+    page.getByText('k3d is not installed, or not on the PATH k3dlamp was started with.')
   ).toBeVisible();
   await screenshot('1-k3d-missing');
+});
+
+test('shows k3dlamp branding, not Headlamp, in light and dark themes', async () => {
+  const bitswalkRed = 'rgb(219, 22, 47)';
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme });
+    await page.reload();
+    for (const [route, name, heading] of [
+      ['/k3d', 'k3d', 'Create a cluster'],
+      ['/', 'home', 'Home'],
+      ['/settings/general', 'settings', 'General Settings'],
+    ]) {
+      await go(route);
+      await expect(page.getByRole('img', { name: 'k3dlamp' }).first()).toBeVisible();
+      // Wait for the page itself, so the next check can't pass on a blank screen.
+      await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
+      await expect(page.locator('body')).not.toContainText(/headlamp/i, { useInnerText: true });
+      expect(await page.title()).toMatch(/k3dlamp$/);
+      await screenshot(`branding-${colorScheme}-${name}`);
+    }
+    await go('/k3d');
+    // Hovering fades the selected item, so park the pointer over the page body.
+    await page.mouse.move(800, 600);
+    const selected = page
+      .getByRole('navigation', { name: 'Navigation' })
+      .getByRole('button', { name: 'k3d', exact: true });
+    await expect(selected).toHaveCSS('background-color', bitswalkRed);
+  }
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.reload();
+  await go('/k3d');
+  // Let the page's k3d check finish before the next test installs k3d.
+  await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
 });
 
 test('finds k3d once installed, with no consent prompt', async () => {
