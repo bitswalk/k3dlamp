@@ -21,7 +21,7 @@ On distributions that restrict unprivileged user namespaces, including Ubuntu 24
 Then install the k3d plugin from inside k3dlamp. This step needs internet access:
 
 1. Open **Plugin Catalog** in the sidebar.
-2. Turn off **Only official**, then search for `k3dlamp`. bitswalk is a verified publisher on Artifact Hub, but the plugin isn't one of Headlamp's official ones.
+2. Turn off **Only official** and confirm with **Yes**, then search for `k3dlamp`. bitswalk is a verified publisher on Artifact Hub, but the plugin isn't one of Headlamp's official ones.
 3. Open **k3d for k3dlamp**, click **Install**, confirm, and click **Reload Now**.
 
 The first time the plugin lists, creates or deletes clusters, k3dlamp asks you to allow that command. It remembers each answer.
@@ -40,8 +40,8 @@ The build makes two kinds of change. Branding replaces Headlamp's logo, icons, c
 | --- | --- |
 | `product` | Runs as `k3dlamp`, with settings in `~/.config/k3dlamp` and the `k3dlamp://` URL scheme, so it can sit next to a Headlamp install |
 | `checkForUpdates: false` | Never points users at upstream Headlamp releases |
-| `plugins` | Ships Headlamp's Plugin Catalog, downloaded at build time and pinned by SHA-256, and none of Headlamp's other default plugins |
-| `proxy-urls` | Lets the catalog reach Artifact Hub |
+| `plugins` | Absent, so none of Headlamp's default plugins ship |
+| `proxy-urls` | Lets the Plugin Catalog reach Artifact Hub |
 | `runCommands` | Lets the k3d plugin, installed from Artifact Hub, run three k3d commands, listed below |
 
 The manifest replaces Headlamp's default manifest completely, so it is the whole command policy:
@@ -55,6 +55,8 @@ The manifest replaces Headlamp's default manifest completely, so it is the whole
 The packaged app grants them only to the plugin that Headlamp's plugin manager installed from the Artifact Hub package `bitswalk/k3dlamp-k3d-plugin`. Headlamp checks that against the installation receipt it wrote, not against the plugin's own files. Headlamp doesn't let a policy for store-installed plugins pre-approve commands, so each of the three asks for consent once. The development policy grants the same commands to a locally built copy; see the plugin's README.
 
 The grants need Headlamp's `runCommands`, which is on `main` but in no release yet; v0.45.0 is the latest. `build/headlamp.Dockerfile` pins commit `032c275fcd3c0301bf03f46c097f012237780d0c`.
+
+The build also compiles Headlamp's Plugin Catalog from its repository at a pinned commit and ships it. The catalog's latest release, 0.4.4, fetches only the first 60 Artifact Hub packages, which hides the k3d plugin; the fix is on its `main` but unreleased.
 
 ## Build and test
 

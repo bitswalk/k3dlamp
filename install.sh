@@ -3,7 +3,7 @@
 #
 #   curl -fsSL https://github.com/bitswalk/k3dlamp/releases/latest/download/install.sh | bash
 #
-# Uninstall (keeps your settings in ~/.config/k3dlamp):
+# Uninstall (keeps your settings and plugins in ~/.config/k3dlamp):
 #
 #   curl -fsSL https://github.com/bitswalk/k3dlamp/releases/latest/download/install.sh | bash -s -- --uninstall
 #
@@ -50,7 +50,7 @@ main() {
     --uninstall)
       rm -rf "$lib_dir"
       rm -f "$bin_dir/k3dlamp" "$desktop_file"
-      say "Removed k3dlamp. Your settings in ~/.config/k3dlamp are untouched."
+      say "Removed k3dlamp. Your settings and plugins in ~/.config/k3dlamp are untouched."
       return
       ;;
     "") ;;

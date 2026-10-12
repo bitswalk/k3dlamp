@@ -9,6 +9,19 @@
 
 FROM golang:1.26-bookworm AS go
 
+# Headlamp's Plugin Catalog, built from source. Its 0.4.4 release stops after
+# the first 60 Artifact Hub packages, which hides the k3d plugin, and
+# hard-codes the backend address. Both fixes are on main but unreleased.
+FROM node:22-bookworm AS catalog
+ARG PLUGINS_COMMIT=668b52dc67e2d4c29c1e2538b87c9ec170804eaf
+WORKDIR /src/plugins
+RUN git init -q . \
+ && git remote add origin https://github.com/headlamp-k8s/plugins.git \
+ && git fetch -q --depth 1 origin "$PLUGINS_COMMIT" \
+ && git checkout -q FETCH_HEAD
+WORKDIR /src/plugins/plugin-catalog
+RUN npm ci --no-audit --no-fund && npm run build && npx headlamp-plugin package . /out
+
 FROM node:22-bookworm AS build
 COPY --from=go /usr/local/go /usr/local/go
 ENV PATH=/usr/local/go/bin:/go/bin:$PATH GOPATH=/go
@@ -37,6 +50,10 @@ ENV HEADLAMP_BUILD_MANIFEST=/product/app-build-manifest.json \
 
 RUN cd frontend && npm run build
 RUN cd app && node --experimental-strip-types ./scripts/setup-plugins.ts
+# setup-plugins rebuilds .plugins from the manifest, so add the catalog after it.
+COPY --from=catalog /out/ /tmp/catalog/
+RUN mkdir -p .plugins/plugin-catalog \
+ && tar -xzf /tmp/catalog/*.tar.gz -C .plugins/plugin-catalog --strip-components=1
 RUN cd app && npm run package -- --linux tar.gz --x64
 
 FROM scratch

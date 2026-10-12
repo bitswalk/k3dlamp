@@ -108,7 +108,15 @@ test('runs as k3dlamp, apart from any Headlamp install', async () => {
 
 test('installs the k3d plugin from Artifact Hub through the Plugin Catalog', async () => {
   test.setTimeout(5 * 60_000);
-  await go(`/plugin-catalog/${store.repository}/${store.package}`);
+  // Find it as a user does: the plugin isn't official, so it only lists with
+  // that filter off, and it sits beyond the first 60 Artifact Hub results.
+  await go('/plugin-catalog');
+  await page.getByLabel('Only Official').click({ timeout: 120_000 });
+  await page.getByRole('dialog').getByRole('button', { name: 'Yes' }).click();
+  await expect(page.getByLabel('Only Official')).not.toBeChecked();
+  await page.locator('main').getByLabel('Search').fill('k3dlamp');
+  await page.getByRole('link', { name: 'k3d for k3dlamp' }).click({ timeout: 120_000 });
+  await expect(page).toHaveURL(new RegExp(`/plugin-catalog/${store.repository}/${store.package}$`));
   const install = page.getByRole('button', { name: 'Install', exact: true });
   await expect(install).toBeVisible({ timeout: 120_000 });
   await screenshot('0-store-listing');
