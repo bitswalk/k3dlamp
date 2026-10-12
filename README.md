@@ -21,7 +21,7 @@ On distributions that restrict unprivileged user namespaces, including Ubuntu 24
 Then install the k3d plugin from inside k3dlamp. This step needs internet access:
 
 1. Open **Plugin Catalog** in the sidebar.
-2. Turn off **Only official** and **Only verified**, then search for `k3dlamp`. Artifact Hub doesn't list the plugin as official.
+2. Turn off **Only official**, then search for `k3dlamp`. bitswalk is a verified publisher on Artifact Hub, but the plugin isn't one of Headlamp's official ones.
 3. Open **k3d for k3dlamp**, click **Install**, confirm, and click **Reload Now**.
 
 The first time the plugin lists, creates or deletes clusters, k3dlamp asks you to allow that command. It remembers each answer.
