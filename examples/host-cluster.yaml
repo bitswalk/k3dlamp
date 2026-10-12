@@ -1,0 +1,33 @@
+# A single-node cluster on this machine's own network, as the Boreal seed runs.
+# Paste this file's absolute path into the plugin's "k3d config file" field.
+#
+# k3s still runs in a Docker container, but shares the host's network: it
+# resolves names with the host's resolver, so it works whatever Docker's
+# firewall back end (dev-cluster.yaml's bridge network breaks under nftables).
+#
+# What it takes from this machine, for as long as the cluster exists:
+# - Ports 6443 (Kubernetes API) and 10250 (kubelet) must be free.
+# - k3s adds network interfaces (cni0, flannel.1) and firewall rules to the
+#   host, as any host-network k3s does. `k3d cluster delete` may not remove all
+#   of them; they go away at the next reboot.
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: host                      # Headlamp shows it as k3d-host
+servers: 1                        # host networking allows a single server node
+agents: 0
+network: host
+options:
+  k3d:
+    wait: true
+    timeout: "300s"
+  k3s:
+    extraArgs:
+      # Traefik would take ports 80 and 443 on this machine. Remove this to
+      # keep it, as the seed does.
+      - arg: --disable=traefik
+        nodeFilters:
+          - server:0
+  kubeconfig:
+    updateDefaultKubeconfig: true # Headlamp picks the new context up from here
+    switchCurrentContext: false
