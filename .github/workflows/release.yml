@@ -1,0 +1,74 @@
+name: Release
+
+# Push a tag v<product.version> to build, test and publish a release whose
+# assets back the one-line installer:
+#   curl -fsSL https://github.com/bitswalk/k3dlamp/releases/latest/download/install.sh | bash
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check the tag matches product.version
+        run: |
+          version="$(jq -r .product.version app-build-manifest.json)"
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match product.version $version"
+            exit 1
+          fi
+
+  build-test:
+    needs: check-version
+    uses: ./.github/workflows/build-test.yml
+
+  publish:
+    needs: build-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: k3dlamp-linux-x64
+          path: dist
+
+      - name: Stamp the installer and sum the assets
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          sed "s/^RELEASE_VERSION=\"@VERSION@\"$/RELEASE_VERSION=\"$version\"/" install.sh >dist/install.sh
+          grep -q "^RELEASE_VERSION=\"$version\"$" dist/install.sh
+          cd dist
+          rm SHA256SUMS
+          sha256sum -- "k3dlamp-$version-linux-x64.tar.gz" install.sh >SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          headlamp_commit="$(sed -n 's/^ARG HEADLAMP_COMMIT=//p' build/headlamp.Dockerfile)"
+          plugin_file="$(jq -r '.plugins[0].file' app-build-manifest.json)"
+          plugin_digest="$(jq -r '.plugins[0].sha256' app-build-manifest.json)"
+          cat >notes.md <<EOF
+          Install or upgrade for the current user:
+
+          \`\`\`bash
+          curl -fsSL https://github.com/bitswalk/k3dlamp/releases/download/$GITHUB_REF_NAME/install.sh | bash
+          \`\`\`
+
+          Requires Linux x86_64, with Docker and k3d on \`PATH\` to create clusters.
+
+          | Component | Pinned to |
+          | --- | --- |
+          | Headlamp | [\`${headlamp_commit:0:12}\`](https://github.com/kubernetes-sigs/headlamp/commit/$headlamp_commit) |
+          | k3d plugin | \`$(basename "$plugin_file")\`, SHA-256 \`$plugin_digest\` |
+          EOF
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "k3dlamp $GITHUB_REF_NAME" --notes-file notes.md --verify-tag

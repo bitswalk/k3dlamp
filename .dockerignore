@@ -1,0 +1,10 @@
+# Only what the build and e2e images copy.
+*
+!app-build-manifest.json
+!plugins/*.tar.gz
+!install.sh
+!examples/dev-cluster.yaml
+!test/e2e/
+test/e2e/node_modules
+test/e2e/test-results
+test/e2e/playwright-report

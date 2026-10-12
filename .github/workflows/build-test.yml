@@ -1,0 +1,45 @@
+name: Build and test
+
+# Shared by CI and Release: builds the Linux x64 package in a container, then
+# installs it with install.sh and runs the end-to-end specs against it.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Free disk space for the Headlamp build
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+      - run: ./scripts/build-headlamp.sh --progress=plain
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: k3dlamp-linux-x64
+          path: |
+            out/k3dlamp-*-linux-x64.tar.gz
+            out/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
+
+  e2e:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Free disk space for the k3d cluster
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: k3dlamp-linux-x64
+          path: out
+      - run: ./scripts/test-headlamp.sh
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: e2e-results
+          path: out/e2e
+          retention-days: 7
