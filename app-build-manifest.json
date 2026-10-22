@@ -5,7 +5,7 @@
     "name": "k3dlamp",
     "productName": "k3dlamp",
     "companyName": "bitswalk",
-    "version": "0.3.1",
+    "version": "0.3.2",
     "appId": "com.github.bitswalk.k3dlamp",
     "protocols": { "name": "k3dlamp-protocol", "schemes": ["k3dlamp"] }
   },
