@@ -19,7 +19,7 @@ const store = { repository: 'bitswalk', package: 'k3dlamp-k3d-plugin' };
 const pluginIdentity = '@bitswalk/headlamp-k3d@k3dlamp-k3d-plugin';
 const k3dRelease = '/opt/k3d';
 const k3dOnPath = '/usr/local/bin/k3d';
-const clusterConfig = '/fixtures/dev-cluster.yaml';
+const clusterConfig = '/fixtures/single-node.yaml';
 const kubeconfig = path.join(os.homedir(), '.kube', 'config');
 const results = process.env.RESULTS_DIR ?? '/results';
 
@@ -195,25 +195,27 @@ test('creates a cluster from a k3d config file', async () => {
   await expect(page.getByText('Creating cluster…')).toBeVisible();
   await screenshot('3-creating');
 
-  await expect(page.getByText('Cluster dev is ready.')).toBeVisible({ timeout: 8 * 60_000 });
-  await expect(page.locator('pre')).toContainText("Cluster 'dev' created successfully!");
+  await expect(page.getByText('Cluster local-aio is ready.')).toBeVisible({
+    timeout: 8 * 60_000,
+  });
+  await expect(page.locator('pre')).toContainText("Cluster 'local-aio' created successfully!");
   await expect(page.locator('pre')).not.toContainText('\u001b');
   // The link only renders once Headlamp has loaded the context k3d wrote.
-  await expect(page.getByRole('link', { name: 'k3d-dev' }).first()).toBeVisible({
+  await expect(page.getByRole('link', { name: 'k3d-local-aio' }).first()).toBeVisible({
     timeout: 60_000,
   });
   await screenshot('4-created');
 });
 
 test('operates the new cluster from Headlamp', async () => {
-  await page.getByRole('link', { name: 'k3d-dev' }).first().click();
-  await go('/c/k3d-dev/nodes');
-  await expect(page.getByRole('link', { name: 'k3d-dev-server-0' })).toBeVisible({
+  await page.getByRole('link', { name: 'k3d-local-aio' }).first().click();
+  await go('/c/k3d-local-aio/nodes');
+  await expect(page.getByRole('link', { name: 'k3d-local-aio-server-0' })).toBeVisible({
     timeout: 120_000,
   });
   await screenshot('5-nodes');
 
-  await go('/c/k3d-dev/pods');
+  await go('/c/k3d-local-aio/pods');
   await expect(page.getByText(/^coredns-/).first()).toBeVisible({ timeout: 120_000 });
   await screenshot('6-pods');
 });
@@ -239,17 +241,19 @@ test('deletes the cluster', async () => {
   test.setTimeout(5 * 60_000);
   await go('/k3d');
   await page
-    .getByRole('row', { name: /k3d-dev/ })
+    .getByRole('row', { name: /k3d-local-aio/ })
     .getByRole('button', { name: 'Delete' })
     .click();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
 
-  await expect(page.getByText('Cluster dev was deleted.')).toBeVisible({ timeout: 4 * 60_000 });
+  await expect(page.getByText('Cluster local-aio was deleted.')).toBeVisible({
+    timeout: 4 * 60_000,
+  });
   await expect(noClusters()).toBeVisible();
   await screenshot('7-deleted');
 
   expect(execFileSync(k3dOnPath, ['cluster', 'list', '-o', 'json']).toString().trim()).toBe('[]');
-  expect(fs.readFileSync(kubeconfig, 'utf8')).not.toContain('k3d-dev');
+  expect(fs.readFileSync(kubeconfig, 'utf8')).not.toContain('k3d-local-aio');
 });
 
 test('refuses k3d to renderer code that lacks the plugin capability', async () => {

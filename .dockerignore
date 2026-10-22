@@ -5,7 +5,7 @@
 !branding/overlay/
 !patches/
 !install.sh
-!examples/dev-cluster.yaml
+!examples/single-node.yaml
 !test/e2e/
 test/e2e/node_modules
 test/e2e/test-results

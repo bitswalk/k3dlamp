@@ -1,4 +1,5 @@
-# A throwaway cluster for trying the plugin on a workstation.
+# A single-node cluster, everything in one k3s server, for trying the plugin
+# on a workstation.
 # It uses k3d's default bridge network, so it leaves the host's interfaces alone.
 # Paste this file's absolute path into the plugin's "k3d config file" field.
 #
@@ -8,7 +9,7 @@
 apiVersion: k3d.io/v1alpha5
 kind: Simple
 metadata:
-  name: dev                       # Headlamp shows it as k3d-dev
+  name: local-aio                 # Headlamp shows it as k3d-local-aio
 servers: 1
 options:
   k3d:

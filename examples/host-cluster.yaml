@@ -3,7 +3,7 @@
 #
 # k3s still runs in a Docker container, but shares the host's network: it
 # resolves names with the host's resolver, so it works whatever Docker's
-# firewall back end (dev-cluster.yaml's bridge network breaks under nftables).
+# firewall back end (single-node.yaml's bridge network breaks under nftables).
 #
 # What it takes from this machine, for as long as the cluster exists:
 # - Ports 6443 (Kubernetes API) and 10250 (kubelet) must be free.

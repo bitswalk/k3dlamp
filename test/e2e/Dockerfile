@@ -27,6 +27,6 @@ RUN npm ci --no-audit --no-fund
 COPY test/e2e/ ./
 COPY install.sh /e2e/
 COPY app-build-manifest.json /product/
-COPY examples/dev-cluster.yaml /fixtures/
+COPY examples/single-node.yaml /fixtures/
 
 ENTRYPOINT ["/e2e/run.sh"]

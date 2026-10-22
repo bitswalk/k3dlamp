@@ -86,7 +86,7 @@ Needs only Docker. Both steps run in containers.
 4. The plugin reports k3d missing.
 5. In light and dark themes, the k3d, home and settings pages show the bitswalk logo, a window title ending in `k3dlamp`, the bitswalk red selection, and no "Headlamp" text.
 6. After k3d is copied onto `PATH`, **Retry** finds it.
-7. **Create** brings up `dev` from `examples/dev-cluster.yaml`, and `k3d-dev` appears in the app.
+7. **Create** brings up `local-aio` from `examples/single-node.yaml`, and `k3d-local-aio` appears in the app.
 8. The app lists the new cluster's node and pods. With the sidebar collapsed, the cluster's k3s version shows as major.minor and stays inside it.
 9. **Delete** removes the cluster and its kubeconfig context.
 10. Renderer code without the plugin's capability cannot run k3d.
