@@ -1,0 +1,56 @@
+Sidebar: show the cluster version as major.minor while the sidebar is collapsed.
+A full k3s version such as v1.35.5+k3s1 overflows the 64px sidebar. The button's
+tooltip and dialog keep the full version.
+
+diff --git a/frontend/src/components/Sidebar/VersionButton.tsx b/frontend/src/components/Sidebar/VersionButton.tsx
+index fe4b0a7..131ad75 100644
+--- a/frontend/src/components/Sidebar/VersionButton.tsx
++++ b/frontend/src/components/Sidebar/VersionButton.tsx
+@@ -27,9 +27,9 @@ import { useTranslation } from 'react-i18next';
+ import semver from 'semver';
+ import { getVersion, useCluster } from '../../lib/k8s';
+ import { StringDict } from '../../lib/k8s/cluster';
+-import { useTypedSelector } from '../../redux/hooks';
+ import { Dialog } from '../common/Dialog';
+ import { NameValueTable } from '../common/SimpleTable';
++import { useSidebarInfo } from './Sidebar';
+ 
+ const versionSnackbarHideTimeout = 5000; // ms
+ const versionFetchInterval = 60000; // ms
+@@ -40,8 +40,17 @@ const VersionIcon = styled(Icon)({
+   marginLeft: '5px',
+ });
+ 
++/**
++ * The version's major and minor, such as v1.35 for v1.35.5+k3s1: the collapsed
++ * sidebar is too narrow for a full version with build metadata.
++ */
++function shortVersion(gitVersion: string) {
++  return gitVersion.match(/^v?\d+\.\d+/)?.[0] ?? gitVersion;
++}
++
+ export default function VersionButton() {
+-  const isSidebarOpen = useTypedSelector(state => state.sidebar.isSidebarOpen);
++  // As the sidebar shows itself: between 600px and 960px wide it stays collapsed.
++  const { isOpen: isSidebarOpen } = useSidebarInfo();
+   const { enqueueSnackbar } = useSnackbar();
+   const cluster = useCluster();
+   const theme = useTheme();
+@@ -136,13 +145,16 @@ export default function VersionButton() {
+       <Button
+         onClick={() => setOpen(true)}
+         size="small"
++        title={clusterVersion.gitVersion}
+         sx={theme => ({ textTransform: 'none', color: theme.palette.sidebar.color })}
+       >
+         <Box display={isSidebarOpen ? 'flex' : 'block'} alignItems="center">
+           <Box>
+             <VersionIcon color={theme.palette.sidebar.color} icon="mdi:kubernetes" />
+           </Box>
+-          <Box>{clusterVersion.gitVersion}</Box>
++          <Box>
++            {isSidebarOpen ? clusterVersion.gitVersion : shortVersion(clusterVersion.gitVersion)}
++          </Box>
+         </Box>
+       </Button>
+       <Dialog open={open} onClose={handleClose} title={t('Kubernetes Version')}>

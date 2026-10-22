@@ -218,6 +218,23 @@ test('operates the new cluster from Headlamp', async () => {
   await screenshot('6-pods');
 });
 
+test('fits the k3s version in the collapsed sidebar', async () => {
+  // k3s versions carry build metadata, such as v1.35.5+k3s1.
+  const version = page.getByTitle(/^v\d+\.\d+\.\d+\+k3s\d+$/);
+  await expect(version).toHaveText(/\+k3s/);
+  await page.getByRole('button', { name: 'Shrink sidebar' }).click();
+  await expect(version).toHaveText(/^v\d+\.\d+$/);
+  const sidebar = page.locator('.MuiDrawer-paper').first();
+  await expect.poll(async () => (await sidebar.boundingBox())?.width).toBeLessThan(100);
+  const [button, drawer] = [await version.boundingBox(), await sidebar.boundingBox()];
+  expect(button!.x + button!.width).toBeLessThanOrEqual(drawer!.x + drawer!.width);
+  expect(await sidebar.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+  await screenshot('6-collapsed-sidebar');
+
+  await page.getByRole('button', { name: 'Expand sidebar' }).click();
+  await expect(version).toHaveText(/\+k3s/);
+});
+
 test('deletes the cluster', async () => {
   test.setTimeout(5 * 60_000);
   await go('/k3d');
