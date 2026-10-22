@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds Headlamp Desktop for Linux x64 in a container, from the pinned Headlamp
-# commit, with this product's manifest and plugin. Writes
+# release, with this product's manifest. Writes
 # out/k3dlamp-<version>-linux-x64.tar.gz and its SHA256SUMS.
 set -euo pipefail
 

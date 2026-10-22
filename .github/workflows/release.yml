@@ -53,8 +53,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          headlamp_version="$(sed -n 's/^ARG HEADLAMP_VERSION=//p' build/headlamp.Dockerfile)"
           headlamp_commit="$(sed -n 's/^ARG HEADLAMP_COMMIT=//p' build/headlamp.Dockerfile)"
-          plugins_commit="$(sed -n 's/^ARG PLUGINS_COMMIT=//p' build/headlamp.Dockerfile)"
+          catalog_url="$(jq -r '.plugins[] | select(.name == "plugin-catalog") | .archive' app-build-manifest.json)"
+          catalog_tag="$(basename "$(dirname "$catalog_url")")"
           cat >notes.md <<EOF
           Install or upgrade for the current user:
 
@@ -66,8 +68,8 @@ jobs:
 
           | Component | Source |
           | --- | --- |
-          | Headlamp | Commit [\`${headlamp_commit:0:12}\`](https://github.com/kubernetes-sigs/headlamp/commit/$headlamp_commit) |
-          | Plugin Catalog | Built from [\`${plugins_commit:0:12}\`](https://github.com/headlamp-k8s/plugins/commit/$plugins_commit) |
+          | Headlamp | [$headlamp_version](https://github.com/kubernetes-sigs/headlamp/releases/tag/$headlamp_version), commit \`${headlamp_commit:0:12}\` |
+          | Plugin Catalog | [${catalog_tag#plugin-catalog-}](https://github.com/headlamp-k8s/plugins/releases/tag/$catalog_tag) |
           | k3d plugin | Installed by users from [Artifact Hub](https://artifacthub.io/packages/headlamp/bitswalk/k3dlamp-k3d-plugin) |
           EOF
           gh release create "$GITHUB_REF_NAME" dist/* \

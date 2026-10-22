@@ -54,9 +54,9 @@ The manifest replaces Headlamp's default manifest completely, so it is the whole
 
 The packaged app grants them only to the plugin that Headlamp's plugin manager installed from the Artifact Hub package `bitswalk/k3dlamp-k3d-plugin`. Headlamp checks that against the installation receipt it wrote, not against the plugin's own files. Headlamp doesn't let a policy for store-installed plugins pre-approve commands, so each of the three asks for consent once. The development policy grants the same commands to a locally built copy; see the plugin's README.
 
-The grants need Headlamp's `runCommands`, which is on `main` but in no release yet; v0.45.0 is the latest. `build/headlamp.Dockerfile` pins commit `032c275fcd3c0301bf03f46c097f012237780d0c`.
+The grants need Headlamp's `runCommands`, which first shipped in v0.46.0. `build/headlamp.Dockerfile` pins that tag and its commit, and fails the build if the tag moves.
 
-The build also compiles Headlamp's Plugin Catalog from its repository at a pinned commit and ships it. The catalog's latest release, 0.4.4, fetches only the first 60 Artifact Hub packages, which hides the k3d plugin; the fix is on its `main` but unreleased.
+The manifest ships one plugin, the Plugin Catalog 0.4.5 release, checked against its SHA-256. Earlier releases fetched only the first 60 Artifact Hub packages, which hid the k3d plugin.
 
 ## Build and test
 
