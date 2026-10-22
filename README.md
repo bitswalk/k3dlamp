@@ -92,7 +92,7 @@ Needs only Docker. Both steps run in containers.
 10. Renderer code without the plugin's capability cannot run k3d.
 11. The app asked consent exactly once for each of the three k3d commands.
 12. At start, the update check reads k3dlamp's releases, and a newer one brings up the notice, with bitswalk red buttons.
-13. **Settings → Updates** shows the setting the notice's bell turned off, and its switch turns the check back on and off.
+13. **Settings → Updates** shows the setting the notice's bell turned off, and its switch turns the check back on and off. In French, the page and its sidebar entry are translated.
 14. After an upgrade, the app shows the new release's notes once, without the install steps.
 
 The specs answer the native install and consent dialogs as a user accepting them would, and record each one. Step 3 installs from the live Artifact Hub, so the tests need internet access. Steps 12 to 14 answer the update check with stub releases instead of GitHub's.
@@ -128,13 +128,13 @@ docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD/branding:/brand
 
 ## Patches
 
-[`patches/`](patches) holds the source changes that string replacements can't make. The build applies them with `git apply`, in name order, before branding. A Headlamp bump that breaks one fails the build.
+[`patches/`](patches) holds the source changes that string replacements can't make. Before branding, [`patches/apply.sh`](patches/apply.sh) applies them with `git apply`, in name order. It then merges [`patches/translations.json`](patches/translations.json), the patches' UI strings in every language Headlamp ships, into Headlamp's locale files. A Headlamp bump that breaks a patch, or adds or drops a language, fails the build.
 
 | Patch | Change |
 | --- | --- |
 | `0001-settings-updates-page.patch` | Adds **Settings → Updates**, desktop app only, with a switch for the startup update check. It shares the setting the update notice's bell turns off |
 
-To change a patch, apply them all to a checkout of the pinned tag, edit, and write each one back with `git diff`. Keep the description lines at the top of the file.
+To change a patch, apply them all to a checkout of the pinned tag, edit, and write each one back with `git diff`. Keep the description lines at the top of the file. A new UI string goes into `translations.json` for every language. Languages Headlamp itself barely translates, currently Hebrew, Hindi and both Portuguese variants, get empty strings, so they fall back to English like the rest of their UI.
 
 ## The k3d plugin
 

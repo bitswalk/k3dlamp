@@ -130,6 +130,21 @@ test("Settings → Updates shares the notice's off setting", async () => {
   await expect(page.locator('body')).not.toContainText(/headlamp/i, { useInnerText: true });
   await screenshot('settings-updates');
 
+  // The page and its sidebar entry come translated, here in French.
+  await page.evaluate(() => localStorage.setItem('i18nextLng', 'fr'));
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Mises à jour', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Rechercher les mises à jour au démarrage')).not.toBeChecked();
+  await expect(
+    page
+      .getByRole('navigation', { name: 'Navigation' })
+      .getByRole('button', { name: 'Mises à jour', exact: true })
+  ).toBeVisible();
+  await screenshot('settings-updates-fr');
+  await page.evaluate(() => localStorage.setItem('i18nextLng', 'en'));
+  await page.reload();
+  await expect(updatesHeading()).toBeVisible();
+
   // On again: the next start announces the release.
   await checkSwitch().check();
   expect(await page.evaluate(() => localStorage.getItem('disable_update_check'))).toBe('false');
