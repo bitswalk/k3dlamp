@@ -30,6 +30,11 @@ RUN cd frontend && npm ci --no-audit --no-fund
 RUN cd app && npm ci --no-audit --no-fund
 RUN make backend
 
+# Source changes string replacements can't make, in name order. One that no
+# longer applies fails the build.
+COPY patches/ /product/patches/
+RUN git apply --verbose /product/patches/*.patch
+
 COPY branding/apply.sh /product/branding/
 COPY branding/overlay/ /product/branding/overlay/
 RUN /product/branding/apply.sh /src/headlamp

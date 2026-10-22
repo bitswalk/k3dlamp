@@ -1,6 +1,6 @@
 # k3dlamp
 
-A Headlamp Desktop build that creates and operates k3d clusters. It is upstream Headlamp, built from a pinned commit with this repository's product manifest and bitswalk branding. The manifest lets the [k3d plugin](https://github.com/bitswalk/k3dlamp-k3d-plugin), which users install from Artifact Hub, run k3d.
+A Headlamp Desktop build that creates and operates k3d clusters. It is upstream Headlamp, built from a pinned release with this repository's product manifest, bitswalk branding and one patch. The manifest lets the [k3d plugin](https://github.com/bitswalk/k3dlamp-k3d-plugin), which users install from Artifact Hub, run k3d.
 
 Open **k3d** in the sidebar, give it the path of a k3d config file, and click **Create**. The cluster appears in the cluster list as `k3d-<name>`, ready to browse like any other cluster.
 
@@ -26,6 +26,12 @@ Then install the k3d plugin from inside k3dlamp. This step needs internet access
 
 The first time the plugin lists, creates or deletes clusters, k3dlamp asks you to allow that command. It remembers each answer.
 
+### Updates
+
+When k3dlamp starts, it checks this repository's releases. If a newer one is out, a notice links to its release page; run the installer again to upgrade. After an upgrade, k3dlamp shows the new release's notes once. k3dlamp never downloads or installs anything itself.
+
+To stop the check, turn off **Settings → Updates → Check for updates at startup**, or click the bell in the notice. Both change the same setting, which applies from the next start.
+
 To uninstall, which leaves your settings and installed plugins in `~/.config/k3dlamp`:
 
 ```bash
@@ -34,13 +40,13 @@ curl -fsSL https://github.com/bitswalk/k3dlamp/releases/latest/download/install.
 
 ## How it differs from Headlamp
 
-The build makes two kinds of change. Branding replaces Headlamp's logo, icons, colours and name in the UI; see [Branding](#branding). Everything else comes from [`app-build-manifest.json`](app-build-manifest.json), which Headlamp's build selects with `HEADLAMP_BUILD_MANIFEST`:
+The build makes three kinds of change. Branding replaces Headlamp's logo, icons, colours and name in the UI; see [Branding](#branding). A patch adds the **Settings → Updates** page; see [Patches](#patches). Everything else comes from [`app-build-manifest.json`](app-build-manifest.json), which Headlamp's build selects with `HEADLAMP_BUILD_MANIFEST`:
 
 | Setting | Effect |
 | --- | --- |
 | `product` | Runs as `k3dlamp`, with settings in `~/.config/k3dlamp` and the `k3dlamp://` URL scheme, so it can sit next to a Headlamp install |
-| `checkForUpdates: false` | Never points users at upstream Headlamp releases |
-| `plugins` | Absent, so none of Headlamp's default plugins ship |
+| `checkForUpdates` | Not set, so the update check runs unless `HEADLAMP_CHECK_FOR_UPDATES=false`. Branding points it at k3dlamp's releases |
+| `plugins` | Only the Plugin Catalog, none of Headlamp's other default plugins |
 | `proxy-urls` | Lets the Plugin Catalog reach Artifact Hub |
 | `runCommands` | Lets the k3d plugin, installed from Artifact Hub, run three k3d commands, listed below |
 
@@ -85,8 +91,11 @@ Needs only Docker. Both steps run in containers.
 9. **Delete** removes the cluster and its kubeconfig context.
 10. Renderer code without the plugin's capability cannot run k3d.
 11. The app asked consent exactly once for each of the three k3d commands.
+12. At start, the update check reads k3dlamp's releases, and a newer one brings up the notice, with bitswalk red buttons.
+13. **Settings → Updates** shows the setting the notice's bell turned off, and its switch turns the check back on and off.
+14. After an upgrade, the app shows the new release's notes once, without the install steps.
 
-The specs answer the native install and consent dialogs as a user accepting them would, and record each one. Step 3 installs from the live Artifact Hub, so the tests need internet access.
+The specs answer the native install and consent dialogs as a user accepting them would, and record each one. Step 3 installs from the live Artifact Hub, so the tests need internet access. Steps 12 to 14 answer the update check with stub releases instead of GitHub's.
 
 The test container runs privileged because it starts its own Docker daemon for k3d, so test clusters never touch the host's Docker. Screenshots, logs and an HTML report land in `out/e2e/`.
 
@@ -102,6 +111,8 @@ The test container runs privileged because it starts its own Docker daemon for k
 | The three UI strings that name Headlamp | Say k3dlamp, in all 26 languages. Translations that transliterate the name fall back to English |
 | **Help → Documentation** and **Open an Issue**, crash reports | Point at this repository |
 | Page description and web-app manifest | Name k3dlamp |
+| Update check | Reads this repository's releases instead of Headlamp's |
+| Update notice buttons | `#FF6B7D` instead of Headlamp yellow |
 
 The version dialog still names Headlamp beside k3dlamp's own version, as the platform k3dlamp is built on.
 
@@ -115,6 +126,16 @@ docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD/branding:/brand
   sh -c 'pip install -q --user pillow==11.3.0 fonttools==4.60.1 brotli==1.1.0 && python /branding/generate.py /font/latin.woff2'
 ```
 
+## Patches
+
+[`patches/`](patches) holds the source changes that string replacements can't make. The build applies them with `git apply`, in name order, before branding. A Headlamp bump that breaks one fails the build.
+
+| Patch | Change |
+| --- | --- |
+| `0001-settings-updates-page.patch` | Adds **Settings → Updates**, desktop app only, with a switch for the startup update check. It shares the setting the update notice's bell turns off |
+
+To change a patch, apply them all to a checkout of the pinned tag, edit, and write each one back with `git diff`. Keep the description lines at the top of the file.
+
 ## The k3d plugin
 
 k3dlamp doesn't carry the plugin. Each plugin release publishes itself on Artifact Hub, and users install or update it from the Plugin Catalog. Nothing here needs to change for a new plugin version, unless the plugin needs different commands.
@@ -124,6 +145,8 @@ The `runCommands` policy pins the plugin's Artifact Hub package and repository I
 ## Release
 
 1. Set `product.version` in `app-build-manifest.json` and commit.
-2. Push a matching tag, for example `v0.2.0`.
+2. Push a matching annotated tag whose message says what changed, for example `git tag -a v0.3.1 -m "Adds Settings → Updates."`.
 
-The release workflow checks the tag against `product.version`, runs the same build and tests as CI, and publishes the tarball, `SHA256SUMS`, and an `install.sh` stamped with that version. `releases/latest/download/install.sh` then installs the new release.
+The release workflow checks the tag is annotated and matches `product.version`, then runs the same build and tests as CI. It publishes the tarball, `SHA256SUMS`, and an `install.sh` stamped with that version. `releases/latest/download/install.sh` then installs the new release.
+
+The release is titled with the bare tag, because the update check reads the title as a version. Its notes open with the tag message and the component versions, which is what k3dlamp shows after an upgrade. The install steps follow Headlamp's `<!-- end-release-notes -->` marker, so they appear only on the release page.

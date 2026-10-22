@@ -3,6 +3,7 @@
 !app-build-manifest.json
 !branding/apply.sh
 !branding/overlay/
+!patches/
 !install.sh
 !examples/dev-cluster.yaml
 !test/e2e/

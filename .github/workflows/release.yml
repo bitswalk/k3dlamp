@@ -22,6 +22,16 @@ jobs:
             echo "::error::Tag $GITHUB_REF_NAME does not match product.version $version"
             exit 1
           fi
+      - name: Check the tag is annotated
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Its message opens the release notes, which k3dlamp shows after an upgrade.
+          type="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$GITHUB_REF_NAME" -q .object.type)"
+          if [ "$type" != tag ]; then
+            echo "::error::Tag $GITHUB_REF_NAME is not annotated; its message becomes the release notes"
+            exit 1
+          fi
 
   build-test:
     needs: check-version
@@ -57,7 +67,20 @@ jobs:
           headlamp_commit="$(sed -n 's/^ARG HEADLAMP_COMMIT=//p' build/headlamp.Dockerfile)"
           catalog_url="$(jq -r '.plugins[] | select(.name == "plugin-catalog") | .archive' app-build-manifest.json)"
           catalog_tag="$(basename "$(dirname "$catalog_url")")"
-          cat >notes.md <<EOF
+          tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$GITHUB_REF_NAME" -q .object.sha)"
+          gh api "repos/$GITHUB_REPOSITORY/git/tags/$tag_sha" -q .message >notes.md
+          # k3dlamp's post-upgrade notes stop at Headlamp's end-release-notes marker,
+          # so the install steps stay on the release page.
+          cat >>notes.md <<EOF
+
+          | Component | Source |
+          | --- | --- |
+          | Headlamp | [$headlamp_version](https://github.com/kubernetes-sigs/headlamp/releases/tag/$headlamp_version), commit \`${headlamp_commit:0:12}\` |
+          | Plugin Catalog | [${catalog_tag#plugin-catalog-}](https://github.com/headlamp-k8s/plugins/releases/tag/$catalog_tag) |
+          | k3d plugin | Installed by users from [Artifact Hub](https://artifacthub.io/packages/headlamp/bitswalk/k3dlamp-k3d-plugin) |
+
+          <!-- end-release-notes -->
+
           Install or upgrade for the current user:
 
           \`\`\`bash
@@ -65,12 +88,6 @@ jobs:
           \`\`\`
 
           Then install the k3d plugin from **Plugin Catalog** in the sidebar, as the [README](https://github.com/bitswalk/k3dlamp#install) describes. Requires Linux x86_64, with Docker and k3d on \`PATH\` to create clusters.
-
-          | Component | Source |
-          | --- | --- |
-          | Headlamp | [$headlamp_version](https://github.com/kubernetes-sigs/headlamp/releases/tag/$headlamp_version), commit \`${headlamp_commit:0:12}\` |
-          | Plugin Catalog | [${catalog_tag#plugin-catalog-}](https://github.com/headlamp-k8s/plugins/releases/tag/$catalog_tag) |
-          | k3d plugin | Installed by users from [Artifact Hub](https://artifacthub.io/packages/headlamp/bitswalk/k3dlamp-k3d-plugin) |
           EOF
           gh release create "$GITHUB_REF_NAME" dist/* \
-            --title "k3dlamp $GITHUB_REF_NAME" --notes-file notes.md --verify-tag
+            --title "$GITHUB_REF_NAME" --notes-file notes.md --verify-tag

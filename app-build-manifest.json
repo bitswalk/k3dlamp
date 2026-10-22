@@ -5,11 +5,10 @@
     "name": "k3dlamp",
     "productName": "k3dlamp",
     "companyName": "bitswalk",
-    "version": "0.3.0",
+    "version": "0.3.1",
     "appId": "com.github.bitswalk.k3dlamp",
     "protocols": { "name": "k3dlamp-protocol", "schemes": ["k3dlamp"] }
   },
-  "checkForUpdates": false,
   "proxy-urls": ["https://artifacthub.io/*"],
   "plugins": [
     {

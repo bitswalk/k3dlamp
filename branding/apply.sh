@@ -52,6 +52,14 @@ replace frontend/src/components/common/ErrorPage/ErrorPage.tsx \
   "const GITHUB_REPO_URL = 'https://github.com/kubernetes-sigs/headlamp';" \
   "const GITHUB_REPO_URL = 'https://github.com/bitswalk/k3dlamp';"
 
+# The update check reads k3dlamp's releases, and its notice's buttons are
+# bitswalk red on the notice's fixed dark background.
+replace frontend/src/components/common/ReleaseNotes/ReleaseNotes.tsx \
+  'https://api.github.com/repos/kinvolk/headlamp/releases' \
+  'https://api.github.com/repos/bitswalk/k3dlamp/releases'
+replace frontend/src/components/common/ReleaseNotes/UpdatePopup.tsx \
+  "color: 'rgb(255, 242, 0)'" "color: '$RED_ON_DARK'"
+
 # Page and web-app metadata.
 replace frontend/index.html 'content="Headlamp: Kubernetes Web UI"' \
   'content="k3dlamp: create and operate k3d clusters"'
