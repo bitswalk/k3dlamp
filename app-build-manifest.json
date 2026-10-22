@@ -5,12 +5,18 @@
     "name": "k3dlamp",
     "productName": "k3dlamp",
     "companyName": "bitswalk",
-    "version": "0.3.3",
+    "version": "0.3.4",
     "appId": "com.github.bitswalk.k3dlamp",
     "protocols": { "name": "k3dlamp-protocol", "schemes": ["k3dlamp"] }
   },
   "proxy-urls": ["https://artifacthub.io/*"],
   "plugins": [
+    {
+      "name": "app-catalog",
+      "packageName": "app-catalog",
+      "archive": "https://github.com/headlamp-k8s/plugins/releases/download/app-catalog-0.9.1/app-catalog-0.9.1.tar.gz",
+      "sha256": "e6f7869ec17d182ea6d654cd6152f89b13fb731c89640323facd794a00c640c8"
+    },
     {
       "name": "plugin-catalog",
       "packageName": "@headlamp-k8s/plugin-catalog",

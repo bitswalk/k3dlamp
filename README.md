@@ -46,7 +46,7 @@ The build makes three kinds of change. Branding replaces Headlamp's logo, icons,
 | --- | --- |
 | `product` | Runs as `k3dlamp`, with settings in `~/.config/k3dlamp` and the `k3dlamp://` URL scheme, so it can sit next to a Headlamp install |
 | `checkForUpdates` | Not set, so the update check runs unless `HEADLAMP_CHECK_FOR_UPDATES=false`. Branding points it at k3dlamp's releases |
-| `plugins` | Only the Plugin Catalog, none of Headlamp's other default plugins |
+| `plugins` | The App Catalog and Plugin Catalog, as in Headlamp's default build, but not its Prometheus plugin |
 | `proxy-urls` | Lets the Plugin Catalog reach Artifact Hub |
 | `runCommands` | Lets the k3d plugin, installed from Artifact Hub, run three k3d commands, listed below |
 
@@ -62,7 +62,10 @@ The packaged app grants them only to the plugin that Headlamp's plugin manager i
 
 The grants need Headlamp's `runCommands`, which first shipped in v0.46.0. `build/headlamp.Dockerfile` pins that tag and its commit, and fails the build if the tag moves.
 
-The manifest ships one plugin, the Plugin Catalog 0.4.5 release, checked against its SHA-256. Earlier releases fetched only the first 60 Artifact Hub packages, which hid the k3d plugin.
+The manifest ships two plugins, each a release checked against its SHA-256 and package name:
+
+- **App Catalog 0.9.1** browses Helm charts and installs them into the current cluster, through the Helm support Headlamp's desktop backend turns on. Besides Artifact Hub, it lists the charts of any Helm repository that a cluster advertises with a Service labelled `catalog.headlamp.dev/is-catalog`.
+- **Plugin Catalog 0.4.5** installs plugins, the k3d plugin among them, from Artifact Hub. Earlier releases fetched only the first 60 Artifact Hub packages, which hid the k3d plugin.
 
 ## Build and test
 
@@ -80,14 +83,14 @@ Needs only Docker. Both steps run in containers.
 
 `test-headlamp.sh` installs that build with `install.sh` and drives it with Playwright under Xvfb. The specs check, in order, that:
 
-1. The package holds this manifest and ships only the Plugin Catalog.
+1. The package holds this manifest and ships the App Catalog and Plugin Catalog.
 2. The app runs as `k3dlamp`, with its settings in `~/.config/k3dlamp`.
 3. The Plugin Catalog installs the k3d plugin from Artifact Hub, after one install confirmation.
 4. The plugin reports k3d missing.
 5. In light and dark themes, the k3d, home and settings pages show the bitswalk logo, a window title ending in `k3dlamp`, the bitswalk red selection, and no "Headlamp" text.
 6. After k3d is copied onto `PATH`, **Retry** finds it.
 7. **Create** brings up `local-aio` from `examples/single-node.yaml`, and `k3d-local-aio` appears in the app.
-8. The app lists the new cluster's node and pods. With the sidebar collapsed, the cluster's k3s version shows as major.minor and stays inside it.
+8. The app lists the new cluster's node and pods. With the sidebar collapsed, the cluster's k3s version shows as major.minor and stays inside it. The App Catalog finds cert-manager's chart.
 9. **Delete** removes the cluster and its kubeconfig context.
 10. Renderer code without the plugin's capability cannot run k3d.
 11. The app asked consent exactly once for each of the three k3d commands.

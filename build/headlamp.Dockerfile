@@ -44,7 +44,7 @@ ENV HEADLAMP_BUILD_MANIFEST=/product/app-build-manifest.json \
     HEADLAMP_SOURCE_COMMIT=$HEADLAMP_COMMIT
 
 RUN cd frontend && npm run build
-# Fetches and checks the plugins the manifest ships: only the Plugin Catalog.
+# Fetches and checks the plugins the manifest ships: the App and Plugin Catalogs.
 RUN cd app && node --experimental-strip-types ./scripts/setup-plugins.ts
 RUN cd app && npm run package -- --linux tar.gz --x64
 

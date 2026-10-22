@@ -65,8 +65,13 @@ jobs:
         run: |
           headlamp_version="$(sed -n 's/^ARG HEADLAMP_VERSION=//p' build/headlamp.Dockerfile)"
           headlamp_commit="$(sed -n 's/^ARG HEADLAMP_COMMIT=//p' build/headlamp.Dockerfile)"
-          catalog_url="$(jq -r '.plugins[] | select(.name == "plugin-catalog") | .archive' app-build-manifest.json)"
-          catalog_tag="$(basename "$(dirname "$catalog_url")")"
+          # One row per shipped plugin: app-catalog-0.9.1 is App Catalog 0.9.1.
+          plugin_rows="$(jq -r '.plugins[] | "\(.name) \(.archive)"' app-build-manifest.json |
+            while read -r name url; do
+              tag="$(basename "$(dirname "$url")")"
+              title="$(sed -E 's/(^|-)([a-z])/ \u\2/g; s/^ //' <<<"$name")"
+              echo "| $title | [${tag#"$name"-}](https://github.com/headlamp-k8s/plugins/releases/tag/$tag) |"
+            done)"
           tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$GITHUB_REF_NAME" -q .object.sha)"
           gh api "repos/$GITHUB_REPOSITORY/git/tags/$tag_sha" -q .message >notes.md
           # k3dlamp's post-upgrade notes stop at Headlamp's end-release-notes marker,
@@ -76,7 +81,7 @@ jobs:
           | Component | Source |
           | --- | --- |
           | Headlamp | [$headlamp_version](https://github.com/kubernetes-sigs/headlamp/releases/tag/$headlamp_version), commit \`${headlamp_commit:0:12}\` |
-          | Plugin Catalog | [${catalog_tag#plugin-catalog-}](https://github.com/headlamp-k8s/plugins/releases/tag/$catalog_tag) |
+          $plugin_rows
           | k3d plugin | Installed by users from [Artifact Hub](https://artifacthub.io/packages/headlamp/bitswalk/k3dlamp-k3d-plugin) |
 
           <!-- end-release-notes -->

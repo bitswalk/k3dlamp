@@ -91,11 +91,14 @@ test.afterAll(async () => {
   fs.writeFileSync(path.join(results, 'headlamp-main.log'), mainLog.join(''));
 });
 
-test('ships the product manifest and the Plugin Catalog, not the k3d plugin', () => {
+test('ships the product manifest and the App and Plugin Catalogs, not the k3d plugin', () => {
   expect(fs.readFileSync(path.join(resources, 'app-build-manifest.json'), 'utf8')).toBe(
     fs.readFileSync(path.join(product, 'app-build-manifest.json'), 'utf8')
   );
-  expect(fs.readdirSync(path.join(resources, '.plugins'))).toEqual(['plugin-catalog']);
+  expect(fs.readdirSync(path.join(resources, '.plugins')).sort()).toEqual([
+    'app-catalog',
+    'plugin-catalog',
+  ]);
 });
 
 test('runs as k3dlamp, apart from any Headlamp install', async () => {
@@ -235,6 +238,18 @@ test('fits the k3s version in the collapsed sidebar', async () => {
 
   await page.getByRole('button', { name: 'Expand sidebar' }).click();
   await expect(version).toHaveText(/\+k3s/);
+});
+
+test('finds Helm charts in the App Catalog', async () => {
+  await go('/c/k3d-local-aio/apps/catalog');
+  const main = page.getByRole('main');
+  await expect(main.getByRole('heading', { name: 'Applications' })).toBeVisible();
+  await main.getByRole('textbox', { name: 'Search' }).fill('cert-manager');
+  await expect(main.getByRole('link', { name: 'cert-manager', exact: true }).first()).toBeVisible({
+    timeout: 60_000,
+  });
+  await expect(main.getByRole('button', { name: 'Install' }).first()).toBeVisible();
+  await screenshot('6-app-catalog');
 });
 
 test('deletes the cluster', async () => {
