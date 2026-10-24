@@ -223,7 +223,7 @@ test('operates the new cluster from Headlamp', async () => {
   await screenshot('6-pods');
 });
 
-test('fits the k3s version in the collapsed sidebar', async () => {
+test('fits the k3s version and centres the icons in the collapsed sidebar', async () => {
   // k3s versions carry build metadata, such as v1.35.5+k3s1.
   const version = page.getByTitle(/^v\d+\.\d+\.\d+\+k3s\d+$/);
   await expect(version).toHaveText(/\+k3s/);
@@ -234,6 +234,27 @@ test('fits the k3s version in the collapsed sidebar', async () => {
   const [button, drawer] = [await version.boundingBox(), await sidebar.boundingBox()];
   expect(button!.x + button!.width).toBeLessThanOrEqual(drawer!.x + drawer!.width);
   expect(await sidebar.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+  // Each icon sits at the centre of its button, which highlights on hover, and of
+  // the sidebar's list. Headlamp alone puts it 2.5px left of both.
+  const icons = await page
+    .getByRole('navigation', { name: 'Navigation' })
+    .locator('.MuiListItemButton-root')
+    .evaluateAll(buttons =>
+      buttons.map(button => {
+        const centre = (el: Element) => {
+          const box = el.getBoundingClientRect();
+          return box.x + box.width / 2;
+        };
+        const icon = centre(button.querySelector('svg')!);
+        return {
+          name: button.getAttribute('aria-label'),
+          offInButton: Math.abs(Math.round(icon - centre(button))),
+          offInSidebar: Math.abs(Math.round(icon - centre(button.closest('ul')!))),
+        };
+      })
+    );
+  expect(icons.length).toBeGreaterThan(0);
+  expect(icons).toEqual(icons.map(({ name }) => ({ name, offInButton: 0, offInSidebar: 0 })));
   await screenshot('6-collapsed-sidebar');
 
   await page.getByRole('button', { name: 'Expand sidebar' }).click();

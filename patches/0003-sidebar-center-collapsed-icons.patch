@@ -1,0 +1,17 @@
+Sidebar: centre each icon in its button while the sidebar is collapsed.
+The button keeps flex-start, so its lone 24px icon sat against the left padding,
+2.5px left of the centre of both the button's highlight and the sidebar.
+
+diff --git a/frontend/src/components/Sidebar/ListItemLink.tsx b/frontend/src/components/Sidebar/ListItemLink.tsx
+index cf72fea..791cc79 100644
+--- a/frontend/src/components/Sidebar/ListItemLink.tsx
++++ b/frontend/src/components/Sidebar/ListItemLink.tsx
+@@ -139,6 +139,8 @@ export default function ListItemLink(props: ListItemLinkProps) {
+           border: 'none',
+           borderRadius: theme.shape.borderRadius + 'px',
+           height: iconOnly ? '50px' : undefined,
++          // Alone in the button, the icon would sit against the left padding.
++          justifyContent: iconOnly ? 'center' : undefined,
+           opacity: hasParent ? 0.9 : 1.0,
+           fontSize: hasParent ? '0.85rem' : '1rem',
+ 

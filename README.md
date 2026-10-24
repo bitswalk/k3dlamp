@@ -1,6 +1,6 @@
 # k3dlamp
 
-A Headlamp Desktop build that creates and operates k3d clusters. It is upstream Headlamp, built from a pinned release with this repository's product manifest, bitswalk branding and two patches. The manifest lets the [k3d plugin](https://github.com/bitswalk/k3dlamp-k3d-plugin), which users install from Artifact Hub, run k3d.
+A Headlamp Desktop build that creates and operates k3d clusters. It is upstream Headlamp, built from a pinned release with this repository's product manifest, bitswalk branding and three patches. The manifest lets the [k3d plugin](https://github.com/bitswalk/k3dlamp-k3d-plugin), which users install from Artifact Hub, run k3d.
 
 Open **k3d** in the sidebar, give it the path of a k3d config file, and click **Create**. The cluster appears in the cluster list as `k3d-<name>`, ready to browse like any other cluster.
 
@@ -40,7 +40,7 @@ curl -fsSL https://github.com/bitswalk/k3dlamp/releases/latest/download/install.
 
 ## How it differs from Headlamp
 
-The build makes three kinds of change. Branding replaces Headlamp's logo, icons, colours and name in the UI; see [Branding](#branding). Patches add the **Settings → Updates** page and fix the collapsed sidebar's cluster version; see [Patches](#patches). Everything else comes from [`app-build-manifest.json`](app-build-manifest.json), which Headlamp's build selects with `HEADLAMP_BUILD_MANIFEST`:
+The build makes three kinds of change. Branding replaces Headlamp's logo, icons, colours and name in the UI; see [Branding](#branding). Patches add the **Settings → Updates** page and fix the collapsed sidebar's cluster version and icon alignment; see [Patches](#patches). Everything else comes from [`app-build-manifest.json`](app-build-manifest.json), which Headlamp's build selects with `HEADLAMP_BUILD_MANIFEST`:
 
 | Setting | Effect |
 | --- | --- |
@@ -90,7 +90,7 @@ Needs only Docker. Both steps run in containers.
 5. In light and dark themes, the k3d, home and settings pages show the bitswalk logo, a window title ending in `k3dlamp`, the bitswalk red selection, and no "Headlamp" text.
 6. After k3d is copied onto `PATH`, **Retry** finds it.
 7. **Create** brings up `local-aio` from `examples/single-node.yaml`, and `k3d-local-aio` appears in the app.
-8. The app lists the new cluster's node and pods. With the sidebar collapsed, the cluster's k3s version shows as major.minor and stays inside it. The App Catalog finds cert-manager's chart.
+8. The app lists the new cluster's node and pods. With the sidebar collapsed, the cluster's k3s version shows as major.minor and stays inside it, and each icon sits at the centre of its button and of the sidebar. The App Catalog finds cert-manager's chart.
 9. **Delete** removes the cluster and its kubeconfig context.
 10. Renderer code without the plugin's capability cannot run k3d.
 11. The app asked consent exactly once for each of the three k3d commands.
@@ -137,6 +137,7 @@ docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD/branding:/brand
 | --- | --- |
 | `0001-settings-updates-page.patch` | Adds **Settings → Updates**, desktop app only, with a switch for the startup update check. It shares the setting the update notice's bell turns off |
 | `0002-sidebar-short-version.patch` | Shows the cluster version as major.minor, such as `v1.35`, while the sidebar is collapsed. A full k3s version like `v1.35.5+k3s1` overflowed the collapsed sidebar. The tooltip and version dialog keep the full version |
+| `0003-sidebar-center-collapsed-icons.patch` | Centres each icon in its button while the sidebar is collapsed. Headlamp left it against the button's left padding, off the centre of the hover and selection highlight and of the sidebar |
 
 To change a patch, apply them all to a checkout of the pinned tag, edit, and write each one back with `git diff`. Keep the description lines at the top of the file. A new UI string goes into `translations.json` for every language. Languages Headlamp itself barely translates, currently Hebrew, Hindi and both Portuguese variants, get empty strings, so they fall back to English like the rest of their UI.
 
