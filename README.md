@@ -1,8 +1,8 @@
 # k3dlamp
 
-A Headlamp Desktop build that creates and operates k3d clusters. It is upstream Headlamp, built from a pinned release with this repository's product manifest, bitswalk branding and three patches. The manifest lets the [k3d plugin](https://github.com/bitswalk/k3dlamp-k3d-plugin), which users install from Artifact Hub, run k3d.
+A Headlamp Desktop build that creates and operates k3d clusters. It is upstream Headlamp, built from a pinned release with this repository's product manifest, bitswalk branding and four patches. The manifest lets the [k3d plugin](https://github.com/bitswalk/k3dlamp-k3d-plugin), which users install from Artifact Hub, run k3d.
 
-Open **k3d** in the sidebar, give it the path of a k3d config file, and click **Create**. The cluster appears in the cluster list as `k3d-<name>`, ready to browse like any other cluster.
+Open **k3d** in the sidebar and click **Add cluster** for a cluster with one k3s server, or **Custom cluster** to write or upload a k3d config first. The cluster appears in the cluster list as `k3d-<name>`, ready to browse like any other cluster.
 
 ## Install
 
@@ -40,7 +40,7 @@ curl -fsSL https://github.com/bitswalk/k3dlamp/releases/latest/download/install.
 
 ## How it differs from Headlamp
 
-The build makes three kinds of change. Branding replaces Headlamp's logo, icons, colours and name in the UI; see [Branding](#branding). Patches add the **Settings → Updates** page and fix the collapsed sidebar's cluster version and icon alignment; see [Patches](#patches). Everything else comes from [`app-build-manifest.json`](app-build-manifest.json), which Headlamp's build selects with `HEADLAMP_BUILD_MANIFEST`:
+The build makes three kinds of change. Branding replaces Headlamp's logo, icons, colours and name in the UI; see [Branding](#branding). Patches add the **Settings → Updates** page, fix the collapsed sidebar's cluster version and icon alignment, and let the k3d plugin hand k3d a cluster config on standard input; see [Patches](#patches). Everything else comes from [`app-build-manifest.json`](app-build-manifest.json), which Headlamp's build selects with `HEADLAMP_BUILD_MANIFEST`:
 
 | Setting | Effect |
 | --- | --- |
@@ -55,12 +55,12 @@ The manifest replaces Headlamp's default manifest completely, so it is the whole
 | Invocation | Match |
 | --- | --- |
 | `k3d cluster list -o json` | Exact |
-| `k3d cluster create --config <path>` | Prefix |
+| `k3d cluster create --config -` | Exact. k3d reads the config on standard input |
 | `k3d cluster delete <name>` | Prefix |
 
 The packaged app grants them only to the plugin that Headlamp's plugin manager installed from the Artifact Hub package `bitswalk/k3dlamp-k3d-plugin`. Headlamp checks that against the installation receipt it wrote, not against the plugin's own files. Headlamp doesn't let a policy for store-installed plugins pre-approve commands, so each of the three asks for consent once. The development policy grants the same commands to a locally built copy; see the plugin's README.
 
-The grants need Headlamp's `runCommands`, which first shipped in v0.46.0. `build/headlamp.Dockerfile` pins that tag and its commit, and fails the build if the tag moves.
+The grants need Headlamp's `runCommands`, which first shipped in v0.46.0. `build/headlamp.Dockerfile` pins that tag and its commit, and fails the build if the tag moves. Creating a cluster also needs `0004-run-command-input.patch`, since stock Headlamp passes a plugin's command no standard input. The k3d plugin 0.3.0 and later needs it, so it needs k3dlamp 0.4.0 or later.
 
 The manifest ships two plugins, each a release checked against its SHA-256 and package name:
 
@@ -89,7 +89,7 @@ Needs only Docker. Both steps run in containers.
 4. The plugin reports k3d missing.
 5. In light and dark themes, the k3d, home and settings pages show the bitswalk logo, a window title ending in `k3dlamp`, the bitswalk red selection, and no "Headlamp" text.
 6. After k3d is copied onto `PATH`, **Retry** finds it.
-7. **Create** brings up `local-aio` from `examples/single-node.yaml`, and `k3d-local-aio` appears in the app.
+7. **Add cluster** brings up `local-aio`, a single k3s server, and `k3d-local-aio` appears in the app. **Custom cluster** then opens its editor on `local-aio-2`, takes `examples/single-node.yaml` as an upload, reports k3d's refusal of a name already in use, and keeps the draft for **Edit config**.
 8. The app lists the new cluster's node and pods. With the sidebar collapsed, the cluster's k3s version shows as major.minor and stays inside it, and each icon sits at the centre of its button and of the sidebar. The App Catalog finds cert-manager's chart.
 9. **Delete** removes the cluster and its kubeconfig context.
 10. Renderer code without the plugin's capability cannot run k3d.
@@ -99,6 +99,14 @@ Needs only Docker. Both steps run in containers.
 14. After an upgrade, the app shows the new release's notes once, without the install steps.
 
 The specs answer the native install and consent dialogs as a user accepting them would, and record each one. Step 3 installs from the live Artifact Hub, so the tests need internet access. Steps 12 to 14 answer the update check with stub releases instead of GitHub's.
+
+A k3dlamp release and a k3d plugin release that depend on each other can't both be on Artifact Hub before the tests run. To test them together, pass the plugin's build:
+
+```bash
+K3D_PLUGIN_MAIN_JS=/path/to/k3dlamp-k3d-plugin/dist/main.js ./scripts/test-headlamp.sh
+```
+
+Step 3 still installs the plugin from Artifact Hub, then replaces its `main.js` with that build and records the build's digest in Headlamp's installation receipt. The plugin keeps its store identity, so it gets the same grants. Run the plain tests again once the plugin release is on Artifact Hub.
 
 The test container runs privileged because it starts its own Docker daemon for k3d, so test clusters never touch the host's Docker. Screenshots, logs and an HTML report land in `out/e2e/`.
 
@@ -138,6 +146,7 @@ docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD/branding:/brand
 | `0001-settings-updates-page.patch` | Adds **Settings → Updates**, desktop app only, with a switch for the startup update check. It shares the setting the update notice's bell turns off |
 | `0002-sidebar-short-version.patch` | Shows the cluster version as major.minor, such as `v1.35`, while the sidebar is collapsed. A full k3s version like `v1.35.5+k3s1` overflowed the collapsed sidebar. The tooltip and version dialog keep the full version |
 | `0003-sidebar-center-collapsed-icons.patch` | Centres each icon in its button while the sidebar is collapsed. Headlamp left it against the button's left padding, off the centre of the hover and selection highlight and of the sidebar |
+| `0004-run-command-input.patch` | Lets a plugin send standard input to a command the manifest grants it: `input`, a string of at most 1 MiB, is the only option such a command takes. The k3d plugin sends its cluster config this way, to `k3d cluster create --config -`. Consent and grants still cover only the command and its arguments, so a granted `create` takes any config the plugin sends |
 
 To change a patch, apply them all to a checkout of the pinned tag, edit, and write each one back with `git diff`. Keep the description lines at the top of the file. A new UI string goes into `translations.json` for every language. Languages Headlamp itself barely translates, currently Hebrew, Hindi and both Portuguese variants, get empty strings, so they fall back to English like the rest of their UI.
 

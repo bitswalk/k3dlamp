@@ -1,0 +1,207 @@
+runCommand: let a plugin pass standard input to a command its manifest grants.
+A granted command still takes no spawn options. Its only option is `input`, a
+string of at most 1 MiB that the app writes to the command's stdin and closes,
+so the k3d plugin can create a cluster from an edited config with
+`k3d cluster create --config -`.
+
+diff --git a/app/electron/runCmd.test.ts b/app/electron/runCmd.test.ts
+index a4f88fb..95819bb 100644
+--- a/app/electron/runCmd.test.ts
++++ b/app/electron/runCmd.test.ts
+@@ -720,6 +720,27 @@ describe('validateCommandData', () => {
+       })[0]
+     ).toBe(true);
+   });
++
++  it.each([
++    ['no options', {}, true],
++    ['string input', { input: 'kind: Simple\n' }, true],
++    ['1 MiB of input', { input: 'x'.repeat(1024 * 1024) }, true],
++    ['more than 1 MiB of input', { input: 'x'.repeat(1024 * 1024 + 1) }, false],
++    ['non-string input', { input: 42 }, false],
++    ['a spawn option', { cwd: '/' }, false],
++    ['input with a spawn option', { input: '', shell: true }, false],
++  ])('for a capability, validates options with %s', (_name, options, valid) => {
++    expect(
++      validateCommandData({
++        id: 'test-id',
++        command: 'examplectl',
++        args: [],
++        options,
++        permissionSecrets: {},
++        capability: 'a'.repeat(64),
++      })[0]
++    ).toBe(valid);
++  });
+ });
+ 
+ describe('handleRunCommand', () => {
+@@ -2054,6 +2075,52 @@ describe('handleRunCommand', () => {
+     expect(sentMessages).toEqual([['command-exit', 'capability-id', -2]]);
+   });
+ 
++  it('writes a capability command input to its standard input, not its spawn options', async () => {
++    const capability = 'a'.repeat(64);
++    fakeEvent.sender.id = 7;
++    childEmitter.stdin = { on: vi.fn(), end: vi.fn() };
++    const { loadSettings } = await import('./settings');
++    vi.mocked(loadSettings).mockReturnValueOnce({
++      confirmedCommands: {
++        [productConsentKey('shipped', 'examplectl', ['project', 'create', '-'])]: true,
++      },
++    });
++
++    await handleRunCommand(
++      fakeEvent,
++      {
++        id: 'capability-id',
++        command: 'examplectl',
++        args: ['project', 'create', '-'],
++        options: { input: 'name: demo\n' },
++        permissionSecrets: {},
++        capability,
++      },
++      { id: 1 } as any,
++      {},
++      new Map([
++        [
++          capability,
++          {
++            bundleName: 'example-plugin',
++            packageName: '@example/plugin',
++            source: 'shipped' as const,
++            grants: [{ tool: 'examplectl', args: ['project', 'create', '-'] }],
++            webContentsId: 7,
++          },
++        ],
++      ])
++    );
++
++    expect(spawnMock).toHaveBeenCalledWith(
++      'examplectl',
++      ['project', 'create', '-'],
++      expect.not.objectContaining({ input: expect.anything() })
++    );
++    expect(childEmitter.stdin.end).toHaveBeenCalledWith('name: demo\n');
++    expect(childEmitter.stdin.on).toHaveBeenCalledWith('error', expect.any(Function));
++  });
++
+   it.each([
+     ['different arguments', 7, ['project', 'delete']],
+     ['different renderer', 8, ['project', 'list']],
+diff --git a/app/electron/runCmd.ts b/app/electron/runCmd.ts
+index 5f960e2..74d4375 100644
+--- a/app/electron/runCmd.ts
++++ b/app/electron/runCmd.ts
+@@ -50,6 +50,7 @@ interface CommandData {
+   /**
+    * Options to pass to the command.
+    * See https://nodejs.org/api/child_process.html#child_process_child_process_spawn_command_args_options
++   * With a capability, the only option is `input`, written to the command's standard input.
+    */
+   options: {};
+   /** The permission secrets for the command. */
+@@ -1170,12 +1171,17 @@ export async function handleRunCommand(
+       ? [preparedPluginScript ?? (scriptPath as string), ...commandData.args.slice(1)]
+       : commandData.args;
+ 
++  // A capability command's only option is its standard input, never a spawn option.
++  const input = commandData.capability
++    ? (commandData.options as { input?: string }).input
++    : undefined;
++
+   // If the command is 'scriptjs', we pass the HEADLAMP_RUN_SCRIPT=true
+   // env var so that the Headlamp or Electron process runs the script.
+   let child: ChildProcessWithoutNullStreams;
+   try {
+     child = spawn(command, args, {
+-      ...commandData.options,
++      ...(commandData.capability ? {} : commandData.options),
+       shell: false,
+       env: {
+         ...(registeredCapability && commandData.command !== 'scriptjs'
+@@ -1221,6 +1227,14 @@ export async function handleRunCommand(
+     removePreparedFiles();
+     sendTerminalEvent(code);
+   });
++
++  if (input !== undefined) {
++    // A command that exits without reading all its input breaks the pipe.
++    child.stdin.on('error', (error: Error) => {
++      console.warn('Command input not delivered', commandFailureContext(spawnFailureReason(error)));
++    });
++    child.stdin.end(input);
++  }
+ }
+ 
+ /**
+@@ -1418,6 +1432,30 @@ export function revokeRunCmdCapabilities(ipcMain: Electron.IpcMain): void {
+   runCmdIpcListeners.get(ipcMain)?.revokeCapabilities();
+ }
+ 
++/** The most a capability command may receive on standard input: 1 MiB of UTF-16 code units. */
++const MAX_CAPABILITY_INPUT_LENGTH = 1024 * 1024;
++
++/**
++ * Whether options sent with a command capability are allowed: none, or only
++ * `input`, a string for the command's standard input.
++ */
++function isCapabilityCommandOptions(options: object): boolean {
++  if (Object.getPrototypeOf(options) !== Object.prototype) {
++    return false;
++  }
++  const keys = Reflect.ownKeys(options);
++  if (keys.length === 0) {
++    return true;
++  }
++  const { input } = options as { input?: unknown };
++  return (
++    keys.length === 1 &&
++    keys[0] === 'input' &&
++    typeof input === 'string' &&
++    input.length <= MAX_CAPABILITY_INPUT_LENGTH
++  );
++}
++
+ /**
+  * Like CommandData, but everything is optional because it's not validated yet.
+  */
+@@ -1463,12 +1501,8 @@ export function validateCommandData(eventData: CommandDataPartial): [boolean, st
+   ) {
+     return [false, 'Invalid command capability'];
+   }
+-  if (
+-    eventData.capability !== undefined &&
+-    (Object.getPrototypeOf(eventData.options) !== Object.prototype ||
+-      Reflect.ownKeys(eventData.options).length !== 0)
+-  ) {
+-    return [false, 'Command capabilities do not allow spawn options'];
++  if (eventData.capability !== undefined && !isCapabilityCommandOptions(eventData.options)) {
++    return [false, 'Command capabilities do not allow spawn options, only input'];
+   }
+ 
+   const validCommands = ['minikube', 'az', 'scriptjs', 'gh'];
+diff --git a/frontend/src/components/App/runCommand.ts b/frontend/src/components/App/runCommand.ts
+index 7e1c178..33fbc01 100644
+--- a/frontend/src/components/App/runCommand.ts
++++ b/frontend/src/components/App/runCommand.ts
+@@ -52,9 +52,18 @@
+ export type PluginRunCommand = (
+   command: string,
+   args: string[],
+-  options: Record<string, never>
++  options: PluginRunCommandOptions
+ ) => ReturnType<typeof runCommand>;
+ 
++/**
++ * What a plugin may pass with a command its product manifest grants. Spawn
++ * options stay with the app: a plugin can't change how or where the command runs.
++ */
++export interface PluginRunCommandOptions {
++  /** Written to the command's standard input, which is then closed. At most 1 MiB. */
++  input?: string;
++}
++
+ export function runCommand(
+   command: string,
+   args: string[],

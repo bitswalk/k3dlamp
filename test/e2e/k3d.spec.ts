@@ -7,6 +7,7 @@
  */
 import { _electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -22,6 +23,8 @@ const k3dOnPath = '/usr/local/bin/k3d';
 const clusterConfig = '/fixtures/single-node.yaml';
 const kubeconfig = path.join(os.homedir(), '.kube', 'config');
 const results = process.env.RESULTS_DIR ?? '/results';
+// A plugin build to test before Artifact Hub has it; see sideloadPluginBuild.
+const pluginBuild = process.env.K3D_PLUGIN_MAIN_JS;
 
 let app: ElectronApplication;
 let page: Page;
@@ -42,9 +45,30 @@ async function screenshot(name: string) {
   await page.screenshot({ path: path.join(results, 'screens', `${name}.png`) });
 }
 
-// SimpleTable also repeats its empty message in a screen-reader status region.
 function noClusters() {
-  return page.getByRole('paragraph').filter({ hasText: 'k3d is installed and has no clusters.' });
+  return page.getByRole('heading', { name: 'No k3d clusters' });
+}
+
+/** The custom cluster editor's text, as Monaco renders it. */
+function editorText() {
+  return page.locator('.monaco-editor .view-lines');
+}
+
+/**
+ * Replaces the store-installed plugin's main.js with a local build, and its
+ * digest in Headlamp's installation receipt, as if Artifact Hub had served that
+ * build. It lets the specs try a plugin release that needs this k3dlamp release
+ * before either is published. The plugin keeps its store identity and grants.
+ */
+async function sideloadPluginBuild(build: string) {
+  const receipts = path.join(os.homedir(), '.config/k3dlamp/plugin-installation-receipts.json');
+  const store = JSON.parse(fs.readFileSync(receipts, 'utf8'));
+  const receipt = store.receipts.find((r: any) => r.package === 'k3dlamp-k3d-plugin');
+  const main = fs.readFileSync(build);
+  fs.writeFileSync(path.join(receipt.inventoryPath, receipt.bundleName, 'main.js'), main);
+  receipt.files['main.js'] = crypto.createHash('sha256').update(main).digest('hex');
+  fs.writeFileSync(receipts, JSON.stringify(store, null, 2));
+  await page.reload();
 }
 
 async function go(route: string) {
@@ -136,6 +160,10 @@ test('installs the k3d plugin from Artifact Hub through the Plugin Catalog', asy
   expect(installs[0].detail).toContain(
     'https://github.com/bitswalk/k3dlamp-k3d-plugin/releases/download/'
   );
+
+  if (pluginBuild) {
+    await sideloadPluginBuild(pluginBuild);
+  }
 });
 
 test('says when k3d is not installed', async () => {
@@ -155,7 +183,7 @@ test('shows k3dlamp branding, not Headlamp, in light and dark themes', async () 
     await page.emulateMedia({ colorScheme });
     await page.reload();
     for (const [route, name, heading] of [
-      ['/k3d', 'k3d', 'Create a cluster'],
+      ['/k3d', 'k3d', 'k3d'],
       ['/', 'home', 'Home'],
       ['/settings/general', 'settings', 'General Settings'],
     ]) {
@@ -191,10 +219,10 @@ test('finds k3d once installed', async () => {
   await screenshot('2-k3d-ready');
 });
 
-test('creates a cluster from a k3d config file', async () => {
+test('creates a single-server cluster with Add cluster', async () => {
   test.setTimeout(10 * 60_000);
-  await page.getByLabel('k3d config file').fill(clusterConfig);
-  await page.getByRole('button', { name: 'Create' }).click();
+  // The sidebar's own Add Cluster button opens Headlamp's provider list instead.
+  await page.getByRole('main').getByRole('button', { name: 'Add cluster', exact: true }).click();
   await expect(page.getByText('Creating cluster…')).toBeVisible();
   await screenshot('3-creating');
 
@@ -208,6 +236,30 @@ test('creates a cluster from a k3d config file', async () => {
     timeout: 60_000,
   });
   await screenshot('4-created');
+});
+
+test('creates from a custom config, and reports what k3d refuses', async () => {
+  await page.getByRole('button', { name: 'Custom cluster' }).click();
+  // The editor opens on the default config, named after the next free cluster name.
+  await expect(editorText()).toContainText('name: local-aio-2');
+  await screenshot('4-custom-editor');
+
+  // single-node.yaml names local-aio, which the previous spec created.
+  await page.getByLabel('k3d config file to upload').setInputFiles(clusterConfig);
+  await expect(editorText()).toContainText('name: local-aio');
+  await expect(editorText()).not.toContainText('local-aio-2');
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await expect(
+    page.getByRole('alert').filter({ hasText: /a cluster with that name already exists/ })
+  ).toBeVisible({ timeout: 60_000 });
+  await screenshot('4-custom-refused');
+
+  // The editor keeps the refused draft for another try.
+  await page.getByRole('button', { name: 'Edit config' }).click();
+  await expect(editorText()).toContainText('Custom cluster editor');
+  // The editor's own Close; the activity's window and taskbar close are icons.
+  await page.getByText('Close', { exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Edit config' })).toBeVisible();
 });
 
 test('operates the new cluster from Headlamp', async () => {
@@ -323,7 +375,7 @@ test('asked consent once for each of the three commands', async () => {
   const consent = (await prompts()).filter(p => p.modal).map(p => p.detail);
   expect(consent).toEqual([
     `${pluginIdentity}: k3d cluster list -o json`,
-    `${pluginIdentity}: k3d cluster create --config`,
+    `${pluginIdentity}: k3d cluster create --config -`,
     `${pluginIdentity}: k3d cluster delete`,
   ]);
 });

@@ -1,7 +1,7 @@
 # A single-node cluster, everything in one k3s server, for trying the plugin
 # on a workstation.
 # It uses k3d's default bridge network, so it leaves the host's interfaces alone.
-# Paste this file's absolute path into the plugin's "k3d config file" field.
+# Upload it in the k3d plugin's Custom cluster editor.
 #
 # If Docker uses the nftables firewall back end ("firewall-backend": "nftables"
 # in /etc/docker/daemon.json), the node can't resolve names and pulls no images:
