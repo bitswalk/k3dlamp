@@ -21,6 +21,13 @@ RUN curl -fsSL -o /opt/k3d "https://github.com/k3d-io/k3d/releases/download/${K3
  && echo "${K3D_SHA256}  /opt/k3d" | sha256sum -c - \
  && chmod 0755 /opt/k3d
 
+# The upstream kind release, on PATH from the start for the kind plugin's specs.
+ARG KIND_VERSION=v0.33.0
+ARG KIND_SHA256=aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d
+RUN curl -fsSL -o /usr/local/bin/kind "https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}/kind-linux-amd64" \
+ && echo "${KIND_SHA256}  /usr/local/bin/kind" | sha256sum -c - \
+ && chmod 0755 /usr/local/bin/kind
+
 WORKDIR /e2e
 COPY test/e2e/package.json test/e2e/package-lock.json ./
 RUN npm ci --no-audit --no-fund

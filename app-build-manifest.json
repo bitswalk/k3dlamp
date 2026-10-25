@@ -29,6 +29,11 @@
       { "tool": "k3d", "args": ["cluster", "list", "-o", "json"] },
       { "tool": "k3d", "args": ["cluster", "create", "--config", "-"] },
       { "tool": "k3d", "args": ["cluster", "delete"], "allowTrailingArgs": true }
+    ],
+    "kind": [
+      { "tool": "kind", "args": ["get", "clusters"] },
+      { "tool": "kind", "args": ["create", "cluster", "--config", "-", "--wait", "5m"] },
+      { "tool": "kind", "args": ["delete", "cluster", "--name"], "allowTrailingArgs": true }
     ]
   },
   "runCommands": [
@@ -39,18 +44,38 @@
         {
           "bundleName": "k3dlamp-k3d-plugin",
           "packageName": "@bitswalk/headlamp-k3d",
-          "artifactHubPackage": "bitswalk/k3dlamp-k3d-plugin",
-          "artifactHubPackageId": "682daae3-a51b-4b70-b7e3-8fd17aa040b6",
-          "artifactHubRepositoryId": "4be0b5a4-e498-41c8-849f-dd394bbe51a6"
+          "artifactHubPackage": "bitswalk-k3dlamp-k3d-plugin/k3dlamp-k3d-plugin",
+          "artifactHubPackageId": "1290d265-7dd4-44d6-a16f-cfafaff20679",
+          "artifactHubRepositoryId": "8b7a668e-8ca6-4128-9c0d-6bc5b1a61e8c"
         }
       ],
       "commandSets": ["k3d"]
+    },
+    {
+      "environment": "production",
+      "pluginLocation": "user",
+      "plugins": [
+        {
+          "bundleName": "k3dlamp-kind-plugin",
+          "packageName": "@bitswalk/headlamp-kind",
+          "artifactHubPackage": "bitswalk-k3dlamp-kind-plugin/k3dlamp-kind-plugin",
+          "artifactHubPackageId": "30504e46-fab5-4350-92b9-799f486f970e",
+          "artifactHubRepositoryId": "b948282f-fac1-4431-ad0a-b4923d151716"
+        }
+      ],
+      "commandSets": ["kind"]
     },
     {
       "environment": "development",
       "pluginLocation": "development",
       "plugins": [{ "bundleName": "headlamp-k3d", "packageName": "@bitswalk/headlamp-k3d" }],
       "commandSets": ["k3d"]
+    },
+    {
+      "environment": "development",
+      "pluginLocation": "development",
+      "plugins": [{ "bundleName": "headlamp-kind", "packageName": "@bitswalk/headlamp-kind" }],
+      "commandSets": ["kind"]
     }
   ],
   "legalDocuments": [

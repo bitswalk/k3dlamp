@@ -1,8 +1,8 @@
 # k3dlamp
 
-A Headlamp Desktop build that creates and operates k3d clusters. It is upstream Headlamp, built from a pinned release with this repository's product manifest, bitswalk branding and four patches. The manifest lets the [k3d plugin](https://github.com/bitswalk/k3dlamp-k3d-plugin), which users install from Artifact Hub, run k3d.
+A Headlamp Desktop build that creates and operates k3d and kind clusters. It is upstream Headlamp, built from a pinned release with this repository's product manifest, bitswalk branding and four patches. The manifest lets the [k3d plugin](https://github.com/bitswalk/k3dlamp-k3d-plugin) and the [kind plugin](https://github.com/bitswalk/k3dlamp-kind-plugin), which users install from Artifact Hub, run k3d and kind.
 
-Open **k3d** in the sidebar and click **Add cluster** for a cluster with one k3s server, or **Custom cluster** to write or upload a k3d config first. The cluster appears in the cluster list as `k3d-<name>`, ready to browse like any other cluster.
+Open **k3d** in the sidebar and click **Add cluster** for a cluster with one k3s server, or **Custom cluster** to write or upload a k3d config first. The cluster appears in the cluster list as `k3d-<name>`, ready to browse like any other cluster. The kind plugin's **kind** page works the same way, for clusters that appear as `kind-<name>`.
 
 ## Install
 
@@ -18,13 +18,13 @@ To create clusters, k3dlamp needs Docker and [k3d](https://k3d.io) on `PATH`. It
 
 On distributions that restrict unprivileged user namespaces, including Ubuntu 24.04 and later, Chromium's sandbox needs its setuid helper. The installer never runs anything as root. Instead it prints the two `sudo` commands to run once per installed version.
 
-Then install the k3d plugin from inside k3dlamp. This step needs internet access:
+Then install the k3d plugin, the kind plugin, or both, from inside k3dlamp. kind suits machines whose package manager ships it, as Ubuntu's does. This step needs internet access:
 
 1. Open **Plugin Catalog** in the sidebar.
-2. Turn off **Only official** and confirm with **Yes**, then search for `k3dlamp`. bitswalk is a verified publisher on Artifact Hub, but the plugin isn't one of Headlamp's official ones.
-3. Open **k3d for k3dlamp**, click **Install**, confirm, and click **Reload Now**.
+2. Turn off **Only official** and confirm with **Yes**, then search for `k3dlamp`. bitswalk is a verified publisher on Artifact Hub, but the plugins aren't among Headlamp's official ones.
+3. Open **k3d for k3dlamp** or **kind for k3dlamp**, click **Install**, confirm, and click **Reload Now**.
 
-The first time the plugin lists, creates or deletes clusters, k3dlamp asks you to allow that command. It remembers each answer.
+To create clusters, the kind plugin needs Docker and [kind](https://kind.sigs.k8s.io) on `PATH`, as the k3d plugin needs k3d. The first time a plugin lists, creates or deletes clusters, k3dlamp asks you to allow that command. It remembers each answer.
 
 ### Updates
 
@@ -48,7 +48,7 @@ The build makes three kinds of change. Branding replaces Headlamp's logo, icons,
 | `checkForUpdates` | Not set, so the update check runs unless `HEADLAMP_CHECK_FOR_UPDATES=false`. Branding points it at k3dlamp's releases |
 | `plugins` | The App Catalog and Plugin Catalog, as in Headlamp's default build, but not its Prometheus plugin |
 | `proxy-urls` | Lets the Plugin Catalog reach Artifact Hub |
-| `runCommands` | Lets the k3d plugin, installed from Artifact Hub, run three k3d commands, listed below |
+| `runCommands` | Lets the k3d and kind plugins, installed from Artifact Hub, run three commands each, listed below |
 
 The manifest replaces Headlamp's default manifest completely, so it is the whole command policy:
 
@@ -57,10 +57,13 @@ The manifest replaces Headlamp's default manifest completely, so it is the whole
 | `k3d cluster list -o json` | Exact |
 | `k3d cluster create --config -` | Exact. k3d reads the config on standard input |
 | `k3d cluster delete <name>` | Prefix |
+| `kind get clusters` | Exact |
+| `kind create cluster --config - --wait 5m` | Exact. kind reads the config on standard input |
+| `kind delete cluster --name <name>` | Prefix |
 
-The packaged app grants them only to the plugin that Headlamp's plugin manager installed from the Artifact Hub package `bitswalk/k3dlamp-k3d-plugin`. Headlamp checks that against the installation receipt it wrote, not against the plugin's own files. Headlamp doesn't let a policy for store-installed plugins pre-approve commands, so each of the three asks for consent once. The development policy grants the same commands to a locally built copy; see the plugin's README.
+The packaged app grants the k3d commands only to the plugin that Headlamp's plugin manager installed from the Artifact Hub package `bitswalk-k3dlamp-k3d-plugin/k3dlamp-k3d-plugin`, and the kind commands only to the one from `bitswalk-k3dlamp-kind-plugin/k3dlamp-kind-plugin`. Headlamp checks that against the installation receipt it wrote, not against the plugin's own files. Headlamp doesn't let a policy for store-installed plugins pre-approve commands, so each command asks for consent once. The development policy grants the same commands to locally built copies; see each plugin's README.
 
-The grants need Headlamp's `runCommands`, which first shipped in v0.46.0. `build/headlamp.Dockerfile` pins that tag and its commit, and fails the build if the tag moves. Creating a cluster also needs `0004-run-command-input.patch`, since stock Headlamp passes a plugin's command no standard input. The k3d plugin 0.3.0 and later needs it, so it needs k3dlamp 0.4.0 or later.
+The grants need Headlamp's `runCommands`, which first shipped in v0.46.0. `build/headlamp.Dockerfile` pins that tag and its commit, and fails the build if the tag moves. Creating a cluster also needs `0004-run-command-input.patch`, since stock Headlamp passes a plugin's command no standard input. The k3d plugin 0.3.0 and later, and every kind plugin release, need it, so they need k3dlamp 0.4.0 or later.
 
 The manifest ships two plugins, each a release checked against its SHA-256 and package name:
 
@@ -97,8 +100,9 @@ Needs only Docker. Both steps run in containers.
 12. At start, the update check reads k3dlamp's releases, and a newer one brings up the notice, with bitswalk red buttons.
 13. **Settings → Updates** shows the setting the notice's bell turned off, and its switch turns the check back on and off. In French, the page and its sidebar entry are translated.
 14. After an upgrade, the app shows the new release's notes once, without the install steps.
+15. The Plugin Catalog installs the kind plugin from Artifact Hub. With kind on `PATH`, **Add cluster** brings up `local-aio`, one kind node, and the app lists the node of `kind-local-aio`. **Delete** removes the cluster and its context. The app asked consent once for each of the three kind commands.
 
-The specs answer the native install and consent dialogs as a user accepting them would, and record each one. Step 3 installs from the live Artifact Hub, so the tests need internet access. Steps 12 to 14 answer the update check with stub releases instead of GitHub's.
+The specs answer the native install and consent dialogs as a user accepting them would, and record each one. Steps 3 and 15 install from the live Artifact Hub, so the tests need internet access. Steps 12 to 14 answer the update check with stub releases instead of GitHub's.
 
 A k3dlamp release and a k3d plugin release that depend on each other can't both be on Artifact Hub before the tests run. To test them together, pass the plugin's build:
 
@@ -155,6 +159,10 @@ To change a patch, apply them all to a checkout of the pinned tag, edit, and wri
 k3dlamp doesn't carry the plugin. Each plugin release publishes itself on Artifact Hub, and users install or update it from the Plugin Catalog. Nothing here needs to change for a new plugin version, unless the plugin needs different commands.
 
 The `runCommands` policy pins the plugin's Artifact Hub package and repository IDs, as well as their names. That keeps the grant with this package even if a repository of the same name is deleted and recreated by someone else.
+
+## The kind plugin
+
+The [kind plugin](https://github.com/bitswalk/k3dlamp-kind-plugin) creates and deletes [kind](https://kind.sigs.k8s.io) clusters with the same page, for machines where kind is the easier install. The manifest's `kind` command set holds its three commands, and its policy pins the kind plugin's Artifact Hub package and repository IDs, as the k3d plugin's does.
 
 ## Release
 

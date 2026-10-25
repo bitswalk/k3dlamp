@@ -16,7 +16,7 @@ const headlamp = process.env.HEADLAMP_BIN ?? path.join(os.homedir(), '.local/bin
 // The installer links the binary into bin/; its resources sit beside the real file.
 const resources = path.join(path.dirname(fs.realpathSync(headlamp)), 'resources');
 const product = '/product';
-const store = { repository: 'bitswalk', package: 'k3dlamp-k3d-plugin' };
+const store = { repository: 'bitswalk-k3dlamp-k3d-plugin', package: 'k3dlamp-k3d-plugin' };
 const pluginIdentity = '@bitswalk/headlamp-k3d@k3dlamp-k3d-plugin';
 const k3dRelease = '/opt/k3d';
 const k3dOnPath = '/usr/local/bin/k3d';
