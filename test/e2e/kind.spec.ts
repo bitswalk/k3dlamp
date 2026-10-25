@@ -86,7 +86,13 @@ test.afterAll(async () => {
 
 test('installs the kind plugin from Artifact Hub through the Plugin Catalog', async () => {
   test.setTimeout(5 * 60_000);
-  await go('/plugin-catalog');
+  // Open the catalog from the home sidebar, as a user does, once the app has
+  // settled: it may first reopen the page an earlier spec file left it on.
+  await go('/');
+  await page
+    .getByRole('navigation', { name: 'Navigation' })
+    .getByRole('button', { name: 'Plugin Catalog', exact: true })
+    .click({ timeout: 120_000 });
   const official = page.getByLabel('Only Official');
   await expect(official).toBeVisible({ timeout: 120_000 });
   // k3d.spec.ts turned the filter off; the catalog may or may not remember it.

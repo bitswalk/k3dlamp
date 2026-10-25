@@ -5,7 +5,14 @@
  * build with install.sh and provides a private Docker daemon. The plugin comes
  * from the live store, so these specs need network access.
  */
-import { _electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
+import {
+  _electron,
+  expect,
+  test,
+  type ElectronApplication,
+  type Locator,
+  type Page,
+} from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -280,6 +287,17 @@ test('fits the k3s version and centres the icons in the collapsed sidebar', asyn
   const version = page.getByTitle(/^v\d+\.\d+\.\d+\+k3s\d+$/);
   await expect(version).toHaveText(/\+k3s/);
   await page.getByRole('button', { name: 'Shrink sidebar' }).click();
+  // The app keeps the sidebar collapsed across restarts, so expand it again even
+  // if a check fails, or the later spec files start with it collapsed.
+  try {
+    await checkCollapsedSidebar(version);
+  } finally {
+    await page.getByRole('button', { name: 'Expand sidebar' }).click();
+  }
+  await expect(version).toHaveText(/\+k3s/);
+});
+
+async function checkCollapsedSidebar(version: Locator) {
   await expect(version).toHaveText(/^v\d+\.\d+$/);
   const sidebar = page.locator('.MuiDrawer-paper').first();
   await expect.poll(async () => (await sidebar.boundingBox())?.width).toBeLessThan(100);
@@ -288,30 +306,29 @@ test('fits the k3s version and centres the icons in the collapsed sidebar', asyn
   expect(await sidebar.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
   // Each icon sits at the centre of its button, which highlights on hover, and of
   // the sidebar's list. Headlamp alone puts it 2.5px left of both.
-  const icons = await page
+  const buttons = page
     .getByRole('navigation', { name: 'Navigation' })
-    .locator('.MuiListItemButton-root')
-    .evaluateAll(buttons =>
-      buttons.map(button => {
-        const centre = (el: Element) => {
-          const box = el.getBoundingClientRect();
-          return box.x + box.width / 2;
-        };
-        const icon = centre(button.querySelector('svg')!);
-        return {
-          name: button.getAttribute('aria-label'),
-          offInButton: Math.abs(Math.round(icon - centre(button))),
-          offInSidebar: Math.abs(Math.round(icon - centre(button.closest('ul')!))),
-        };
-      })
-    );
+    .locator('.MuiListItemButton-root');
+  // Collapsing remounts each icon, and Iconify draws its svg a render later.
+  await expect(buttons.filter({ hasNot: page.locator('svg') })).toHaveCount(0);
+  const icons = await buttons.evaluateAll(buttons =>
+    buttons.map(button => {
+      const centre = (el: Element) => {
+        const box = el.getBoundingClientRect();
+        return box.x + box.width / 2;
+      };
+      const icon = centre(button.querySelector('svg')!);
+      return {
+        name: button.getAttribute('aria-label'),
+        offInButton: Math.abs(Math.round(icon - centre(button))),
+        offInSidebar: Math.abs(Math.round(icon - centre(button.closest('ul')!))),
+      };
+    })
+  );
   expect(icons.length).toBeGreaterThan(0);
   expect(icons).toEqual(icons.map(({ name }) => ({ name, offInButton: 0, offInSidebar: 0 })));
   await screenshot('6-collapsed-sidebar');
-
-  await page.getByRole('button', { name: 'Expand sidebar' }).click();
-  await expect(version).toHaveText(/\+k3s/);
-});
+}
 
 test('finds Helm charts in the App Catalog', async () => {
   await go('/c/k3d-local-aio/apps/catalog');
