@@ -140,13 +140,15 @@ test('creates a single-node cluster with Add cluster', async () => {
 
 test('operates the new cluster from Headlamp', async () => {
   await page.getByRole('link', { name: 'kind-local-aio' }).first().click();
-  // Let the link's own navigation land first, or it can replace the next one.
-  await expect(page).toHaveURL(/#\/c\/kind-local-aio\//);
-  await go('/c/kind-local-aio/nodes');
-  // Exact: the overview's events also link pods named after the node.
-  await expect(
-    page.getByRole('link', { name: 'local-aio-control-plane', exact: true })
-  ).toBeVisible({ timeout: 120_000 });
+  // Opening a cluster can navigate, or reload the page, more than once after the
+  // click, and either can replace or interrupt the next navigation. Ask for its
+  // nodes until they show. Exact: the overview's events also link pods named
+  // after the node.
+  const node = page.getByRole('link', { name: 'local-aio-control-plane', exact: true });
+  await expect(async () => {
+    await go('/c/kind-local-aio/nodes');
+    await expect(node).toBeVisible({ timeout: 10_000 });
+  }).toPass({ timeout: 120_000 });
   await screenshot('kind-3-nodes');
 });
 
