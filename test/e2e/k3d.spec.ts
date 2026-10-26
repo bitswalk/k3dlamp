@@ -271,10 +271,13 @@ test('creates from a custom config, and reports what k3d refuses', async () => {
 
 test('operates the new cluster from Headlamp', async () => {
   await page.getByRole('link', { name: 'k3d-local-aio' }).first().click();
+  // Let the link's own navigation land first, or it can replace the next one.
+  await expect(page).toHaveURL(/#\/c\/k3d-local-aio\//);
   await go('/c/k3d-local-aio/nodes');
-  await expect(page.getByRole('link', { name: 'k3d-local-aio-server-0' })).toBeVisible({
-    timeout: 120_000,
-  });
+  // Exact: the overview's events also link pods named after the node.
+  await expect(
+    page.getByRole('link', { name: 'k3d-local-aio-server-0', exact: true })
+  ).toBeVisible({ timeout: 120_000 });
   await screenshot('5-nodes');
 
   await go('/c/k3d-local-aio/pods');
