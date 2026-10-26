@@ -1,0 +1,164 @@
+Plugin settings: don't offer Save & Apply for a delete, or while one runs.
+Deleting a plugin removed its row at once, which showed Save & Apply. The
+delete only reaches the backend after a 5-second cancellation window, and
+saving reloads the page, so saving in that window abandoned the delete. A
+removed row is no longer a change to save, since a delete reloads the page
+itself once it succeeds, and Save & Apply stays disabled while any delete is
+in flight.
+
+diff --git a/frontend/src/components/App/PluginSettings/PluginSettings.test.tsx b/frontend/src/components/App/PluginSettings/PluginSettings.test.tsx
+index d0728ee..70e3460 100644
+--- a/frontend/src/components/App/PluginSettings/PluginSettings.test.tsx
++++ b/frontend/src/components/App/PluginSettings/PluginSettings.test.tsx
+@@ -237,6 +237,43 @@ describe('PluginSettingsPure', () => {
+     expect(screen.getAllByLabelText('Delete Plugin')).toHaveLength(1);
+   });
+ 
++  it('does not offer Save & Apply for a delete, which applies itself', async () => {
++    confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
++    const onDelete = vi.fn(() => new Promise<void>(() => {}));
++
++    renderPluginSettings({ plugins: createPlugins(2), onDelete });
++
++    fireEvent.click(screen.getAllByLabelText('Delete Plugin')[0]);
++
++    await waitFor(() => expect(onDelete).toHaveBeenCalled());
++    expect(screen.getAllByLabelText('Delete Plugin')).toHaveLength(1);
++    expect(screen.queryByRole('button', { name: 'Save & Apply' })).toBeNull();
++  });
++
++  it('disables Save & Apply until a pending delete finishes', async () => {
++    confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
++    let finishDelete!: () => void;
++    const onDelete = vi.fn(
++      () =>
++        new Promise<void>(resolve => {
++          finishDelete = resolve;
++        })
++    );
++
++    renderPluginSettings({ plugins: createPlugins(3), onDelete });
++
++    // An unsaved change to another plugin keeps the button on screen.
++    fireEvent.click(screen.getAllByRole('checkbox')[2]);
++    const save = screen.getByRole('button', { name: 'Save & Apply' });
++    expect(save).toBeEnabled();
++
++    fireEvent.click(screen.getAllByLabelText('Delete Plugin')[0]);
++    await waitFor(() => expect(save).toBeDisabled());
++
++    await act(async () => finishDelete());
++    await waitFor(() => expect(save).toBeEnabled());
++  });
++
+   it('restores the row when onDelete fails', async () => {
+     confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+     const onDelete = vi.fn().mockRejectedValue(new Error('boom'));
+diff --git a/frontend/src/components/App/PluginSettings/PluginSettings.tsx b/frontend/src/components/App/PluginSettings/PluginSettings.tsx
+index e078a2d..5285c5e 100644
+--- a/frontend/src/components/App/PluginSettings/PluginSettings.tsx
++++ b/frontend/src/components/App/PluginSettings/PluginSettings.tsx
+@@ -120,6 +120,11 @@ const EnableSwitch = (props: SwitchProps) => {
+   );
+ };
+ 
++/** Identifies a plugin row, as the table's getRowId does: one name can have several types. */
++function pluginRowKey(plugin: { name: string; type?: string }) {
++  return `${plugin.name}-${plugin.type}`;
++}
++
+ /** PluginSettingsPure is the main component to where we render the plugin data. */
+ export function PluginSettingsPure(props: PluginSettingsPureProps) {
+   const { t } = useTranslation(['translation']);
+@@ -130,6 +135,18 @@ export function PluginSettingsPure(props: PluginSettingsPureProps) {
+   /** enableSave state enables the save button when changes are made to the plugin list */
+   const [enableSave, setEnableSave] = useState(false);
+ 
++  /**
++   * Rows removed by a delete. A delete applies itself and reloads the page once it
++   * succeeds, so a removed row is not a change for the Save button to save.
++   */
++  const [deletedRows, setDeletedRows] = useState<Set<string>>(() => new Set());
++
++  /**
++   * Deletes still in flight: onDelete may wait out a cancellation window before it
++   * deletes anything. Saving reloads the page, which would abandon them.
++   */
++  const [pendingDeletes, setPendingDeletes] = useState(0);
++
+   /**
+    * pluginChanges state is the array of plugin data and any current changes made by the user to a plugin's "Enable" field via toggler.
+    * The name and origin fields are split for consistency.
+@@ -170,9 +187,10 @@ export function PluginSettingsPure(props: PluginSettingsPureProps) {
+      * If both arrays are identical in this scope, then no changes need to be saved.
+      * If they do not match, there are changes in the pluginChanges array that can be saved and thus enableSave should be enabled.
+      */
++    const savedPlugins = props.plugins.filter(plugin => !deletedRows.has(pluginRowKey(plugin)));
+     const arrayComp =
+-      props.plugins.length === pluginChanges.length &&
+-      props.plugins.every((val, key) => matcher(val, pluginChanges[key]));
++      savedPlugins.length === pluginChanges.length &&
++      savedPlugins.every((val, key) => matcher(val, pluginChanges[key]));
+ 
+     /** For storybook usage, determines if the save button should be enabled by default */
+     if (props.saveAlwaysEnable) {
+@@ -186,7 +204,7 @@ export function PluginSettingsPure(props: PluginSettingsPureProps) {
+       }
+     }
+     // eslint-disable-next-line react-hooks/exhaustive-deps
+-  }, [pluginChanges]);
++  }, [pluginChanges, deletedRows]);
+ 
+   /**
+    * onSaveButton function to be called once the user clicks the Save button.
+@@ -206,17 +224,27 @@ export function PluginSettingsPure(props: PluginSettingsPureProps) {
+     // Optimistic update: remove the row immediately so the user gets feedback.
+     // Match by both name and type so we don't remove other versions of the same plugin.
+     const previous = pluginChanges;
++    const rowKey = pluginRowKey(plugin);
++    setDeletedRows(current => new Set(current).add(rowKey));
+     setPluginChanges((current: any[]) =>
+       current.filter((p: any) => !(p.name === plugin.name && p.type === plugin.type))
+     );
+ 
+     if (!props.onDelete) return;
+ 
++    setPendingDeletes(count => count + 1);
+     try {
+       await props.onDelete(plugin);
+     } catch {
+       // Restore the row if deletion fails.
+       setPluginChanges(previous);
++      setDeletedRows(current => {
++        const next = new Set(current);
++        next.delete(rowKey);
++        return next;
++      });
++    } finally {
++      setPendingDeletes(count => count - 1);
+     }
+   }
+ 
+@@ -508,7 +536,7 @@ export function PluginSettingsPure(props: PluginSettingsPureProps) {
+             .filter(el => !(el.header === t('translation|Enable') && !isElectron()))
+             .filter(el => !(el.header === t('translation|Delete') && !isElectron()))}
+           data={pluginChanges}
+-          getRowId={(row: PluginInfo) => `${row.name}-${row.type}`}
++          getRowId={(row: PluginInfo) => pluginRowKey(row)}
+           filterFunction={useFilterFunc<PluginInfo>(['.name'])}
+           muiTableBodyRowProps={({ row }) => {
+             const plugin = row.original as PluginInfo;
+@@ -557,7 +585,12 @@ export function PluginSettingsPure(props: PluginSettingsPureProps) {
+             margin: '-16px -16px 0 -16px',
+           }}
+         >
+-          <Button variant="contained" color="primary" onClick={() => onSaveButtonHandler()}>
++          <Button
++            variant="contained"
++            color="primary"
++            disabled={pendingDeletes > 0}
++            onClick={() => onSaveButtonHandler()}
++          >
+             {t('translation|Save & Apply')}
+           </Button>
+         </Box>

@@ -174,3 +174,59 @@ test('asked consent once for each of the three kind commands', async () => {
     `${pluginIdentity}: kind delete cluster --name`,
   ]);
 });
+
+test('deletes the plugin from Settings → Plugins without offering Save & Apply', async () => {
+  test.setTimeout(2 * 60_000);
+  const pluginDir = path.join(os.homedir(), '.config/k3dlamp/user-plugins', store.package);
+  expect(fs.existsSync(pluginDir)).toBe(true);
+  await go('/settings/plugins');
+  const row = page.getByRole('row', { name: /headlamp-kind/ });
+  await expect(row).toBeVisible({ timeout: 60_000 });
+
+  // Electron answers window.confirm itself, out of Playwright's reach, so accept
+  // it in the page as a user would, and record what it asked. Also record whether
+  // Save & Apply ever shows. The delete waits out a cancellation window first,
+  // and saving in it reloaded the page and abandoned the delete, so the page no
+  // longer offers to save a delete at all.
+  await page.evaluate(() => {
+    const e2e = window as any;
+    e2e.e2eConfirms = [];
+    window.confirm = (message?: string) => {
+      e2e.e2eConfirms.push(String(message));
+      return true;
+    };
+    e2e.e2eSaveShown = false;
+    new MutationObserver(() => {
+      if ([...document.querySelectorAll('button')].some(b => b.textContent === 'Save & Apply')) {
+        e2e.e2eSaveShown = true;
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+  // A successful delete reloads the page by itself.
+  const reloaded = page.waitForEvent('load', { timeout: 90_000 });
+  await row.getByRole('button', { name: 'Delete Plugin' }).click();
+  expect(await page.evaluate(() => (window as any).e2eConfirms)).toEqual([
+    'Are you sure you want to delete this plugin?',
+  ]);
+  await expect(row).toBeHidden();
+  await expect(page.getByText(`Deleting plugin ${store.package}...`)).toBeVisible();
+  await screenshot('kind-5-plugin-deleting');
+
+  await expect(page.getByText(`Deleted plugin ${store.package}.`)).toBeVisible({
+    timeout: 30_000,
+  });
+  // Read it before the page reloads itself, two seconds after the delete.
+  expect(await page.evaluate(() => (window as any).e2eSaveShown)).toBe(false);
+  await reloaded;
+  await expect(page.getByRole('row', { name: /headlamp-k3d/ })).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByRole('row', { name: /headlamp-kind/ })).toBeHidden();
+  expect(fs.existsSync(pluginDir)).toBe(false);
+
+  await go('/');
+  await expect(
+    page
+      .getByRole('navigation', { name: 'Navigation' })
+      .getByRole('button', { name: 'k3d', exact: true })
+  ).toBeVisible();
+  await expect(sidebarKind()).toBeHidden();
+});

@@ -205,3 +205,30 @@ index 7e1c178..33fbc01 100644
  export function runCommand(
    command: string,
    args: string[],
+diff --git a/frontend/src/plugin/commandCapabilities.test.ts b/frontend/src/plugin/commandCapabilities.test.ts
+index 7557eb4..e683f58 100644
+--- a/frontend/src/plugin/commandCapabilities.test.ts
++++ b/frontend/src/plugin/commandCapabilities.test.ts
+@@ -15,7 +15,7 @@
+  */
+ 
+ import { describe, expect, expectTypeOf, it, vi } from 'vitest';
+-import { PluginRunCommand } from '../components/App/runCommand';
++import { PluginRunCommand, PluginRunCommandOptions } from '../components/App/runCommand';
+ import {
+   commandCapabilityRegistration,
+   createPluginRunCommand,
+@@ -156,10 +156,11 @@ describe('preparePluginCommandCapabilities', () => {
+ });
+ 
+ describe('createPluginRunCommand', () => {
+-  it('exposes only command, arguments, and empty options to plugins', () => {
++  it('exposes only command, arguments, and the input option to plugins', () => {
+     expectTypeOf<PluginRunCommand>().parameters.toEqualTypeOf<
+-      [command: string, args: string[], options: Record<string, never>]
++      [command: string, args: string[], options: PluginRunCommandOptions]
+     >();
++    expectTypeOf<PluginRunCommandOptions>().toEqualTypeOf<{ input?: string }>();
+   });
+ 
+   it('forwards the private capability through the captured bridge', () => {
