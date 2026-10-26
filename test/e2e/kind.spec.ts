@@ -118,6 +118,47 @@ test('installs the kind plugin from Artifact Hub through the Plugin Catalog', as
   );
 });
 
+test('leaves the kubeconfig unlocked after Headlamp removes a cluster from it', async () => {
+  // kind and kubectl treat config.lock existing as another program writing the
+  // kubeconfig. Headlamp used to leave that file behind after its first edit,
+  // so kind could create clusters but never add them to the kubeconfig again.
+  const lockPath = `${kubeconfig}.lock`;
+  fs.writeFileSync(
+    kubeconfig,
+    [
+      'apiVersion: v1',
+      'kind: Config',
+      'clusters:',
+      '- name: e2e-removed',
+      '  cluster: { server: "https://127.0.0.1:1" }',
+      'users:',
+      '- name: e2e-removed',
+      '  user: { token: e2e }',
+      'contexts:',
+      '- name: e2e-removed',
+      '  context: { cluster: e2e-removed, user: e2e-removed }',
+      'current-context: e2e-removed',
+      '',
+    ].join('\n')
+  );
+  await go('/');
+  const row = page.getByRole('row', { name: /e2e-removed/ });
+  await expect(row).toBeVisible({ timeout: 60_000 });
+
+  // Removing a cluster reloads the page.
+  const reloaded = page.waitForEvent('load', { timeout: 60_000 });
+  await row.getByRole('button', { name: 'Actions' }).click();
+  await page.getByRole('menuitem', { name: 'Delete' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
+  await reloaded;
+
+  // Headlamp removes the cluster, user and context, but leaves current-context.
+  await expect
+    .poll(() => fs.readFileSync(kubeconfig, 'utf8'))
+    .not.toContain('name: e2e-removed');
+  expect(fs.existsSync(lockPath)).toBe(false);
+});
+
 test('creates a single-node cluster with Add cluster', async () => {
   test.setTimeout(10 * 60_000);
   await sidebarKind().click();

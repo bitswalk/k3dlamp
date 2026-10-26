@@ -1,6 +1,6 @@
 # k3dlamp
 
-A Headlamp Desktop build that creates and operates k3d and kind clusters. It is upstream Headlamp, built from a pinned release with this repository's product manifest, bitswalk branding and five patches. The manifest lets the [k3d plugin](https://github.com/bitswalk/k3dlamp-k3d-plugin) and the [kind plugin](https://github.com/bitswalk/k3dlamp-kind-plugin), which users install from Artifact Hub, run k3d and kind.
+A Headlamp Desktop build that creates and operates k3d and kind clusters. It is upstream Headlamp, built from a pinned release with this repository's product manifest, bitswalk branding and six patches. The manifest lets the [k3d plugin](https://github.com/bitswalk/k3dlamp-k3d-plugin) and the [kind plugin](https://github.com/bitswalk/k3dlamp-kind-plugin), which users install from Artifact Hub, run k3d and kind.
 
 Open **k3d** in the sidebar and click **Add cluster** for a cluster with one k3s server, or **Custom cluster** to write or upload a k3d config first. The cluster appears in the cluster list as `k3d-<name>`, ready to browse like any other cluster. The kind plugin's **kind** page works the same way, for clusters that appear as `kind-<name>`.
 
@@ -40,7 +40,7 @@ curl -fsSL https://github.com/bitswalk/k3dlamp/releases/latest/download/install.
 
 ## How it differs from Headlamp
 
-The build makes three kinds of change. Branding replaces Headlamp's logo, icons, colours and name in the UI; see [Branding](#branding). Patches add the **Settings → Updates** page, fix the collapsed sidebar's cluster version and icon alignment, let the plugins hand k3d and kind a cluster config on standard input, and keep **Settings → Plugins** from abandoning a plugin delete; see [Patches](#patches). Everything else comes from [`app-build-manifest.json`](app-build-manifest.json), which Headlamp's build selects with `HEADLAMP_BUILD_MANIFEST`:
+The build makes three kinds of change. Branding replaces Headlamp's logo, icons, colours and name in the UI; see [Branding](#branding). Patches add the **Settings → Updates** page, fix the collapsed sidebar's cluster version and icon alignment, let the plugins hand k3d and kind a cluster config on standard input, keep **Settings → Plugins** from abandoning a plugin delete, and lock the kubeconfig the way kind and kubectl expect; see [Patches](#patches). Everything else comes from [`app-build-manifest.json`](app-build-manifest.json), which Headlamp's build selects with `HEADLAMP_BUILD_MANIFEST`:
 
 | Setting | Effect |
 | --- | --- |
@@ -100,7 +100,7 @@ Needs only Docker. Both steps run in containers.
 12. At start, the update check reads k3dlamp's releases, and a newer one brings up the notice, with bitswalk red buttons.
 13. **Settings → Updates** shows the setting the notice's bell turned off, and its switch turns the check back on and off. In French, the page and its sidebar entry are translated.
 14. After an upgrade, the app shows the new release's notes once, without the install steps.
-15. The Plugin Catalog installs the kind plugin from Artifact Hub. With kind on `PATH`, **Add cluster** brings up `local-aio`, one kind node, and the app lists the node of `kind-local-aio`. **Delete** removes the cluster and its context. The app asked consent once for each of the three kind commands. Deleting the plugin in **Settings → Plugins** never offers **Save & Apply**, and once the page reloads itself the plugin is gone from the page and from disk.
+15. The Plugin Catalog installs the kind plugin from Artifact Hub. Removing a cluster from the home page leaves no `~/.kube/config.lock` behind. With kind on `PATH`, **Add cluster** brings up `local-aio`, one kind node, and the app lists the node of `kind-local-aio`. **Delete** removes the cluster and its context. The app asked consent once for each of the three kind commands. Deleting the plugin in **Settings → Plugins** never offers **Save & Apply**, and once the page reloads itself the plugin is gone from the page and from disk.
 
 The specs answer the native install and consent dialogs as a user accepting them would, and record each one. Steps 3 and 15 install from the live Artifact Hub, so the tests need internet access. Steps 12 to 14 answer the update check with stub releases instead of GitHub's.
 
@@ -152,6 +152,7 @@ docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD/branding:/brand
 | `0003-sidebar-center-collapsed-icons.patch` | Centres each icon in its button while the sidebar is collapsed. Headlamp left it against the button's left padding, off the centre of the hover and selection highlight and of the sidebar |
 | `0004-run-command-input.patch` | Lets a plugin send standard input to a command the manifest grants it: `input`, a string of at most 1 MiB, is the only option such a command takes. The k3d plugin sends its cluster config this way, to `k3d cluster create --config -`. Consent and grants still cover only the command and its arguments, so a granted `create` takes any config the plugin sends |
 | `0005-plugin-delete-before-save.patch` | Keeps **Settings → Plugins** from offering **Save & Apply** for a plugin delete, and disables it while any delete runs. The delete waits out a 5-second cancellation window before it reaches the backend, and saving reloads the page, so saving in that window abandoned the delete. A successful delete reloads the page itself |
+| `0006-kubeconfig-lock-file.patch` | Locks the kubeconfig the way client-go, kubectl and kind do: by creating `~/.kube/config.lock` exclusively, waiting while another program holds it, and removing it when done. Headlamp held an `flock` on that file instead and left it behind, so after Headlamp's first kubeconfig edit kind created clusters but failed to add them to the kubeconfig |
 
 To change a patch, apply them all to a checkout of the pinned tag, edit, and write each one back with `git diff`. Keep the description lines at the top of the file. A new UI string goes into `translations.json` for every language. Languages Headlamp itself barely translates, currently Hebrew, Hindi and both Portuguese variants, get empty strings, so they fall back to English like the rest of their UI.
 
