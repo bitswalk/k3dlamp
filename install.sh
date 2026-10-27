@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installs k3dlamp, a Headlamp Desktop build that drives k3d, for the current user.
+# Installs k3dlamp, a Headlamp Desktop build that drives k3d and kind, for the current user.
 #
 #   curl -fsSL https://github.com/bitswalk/k3dlamp/releases/latest/download/install.sh | bash
 #
@@ -38,6 +38,18 @@ userns_restricted() {
 
 setuid_root() {
   [ -u "$1" ] && [ "$(stat -c %u "$1")" = 0 ]
+}
+
+# k3dlamp's plugins create clusters with k3d or kind. Either will do, and both
+# run their clusters in Docker.
+check_tools() {
+  local missing=()
+  command -v docker >/dev/null || missing+=("docker")
+  command -v k3d >/dev/null || command -v kind >/dev/null || missing+=("k3d or kind")
+  if [ "${#missing[@]}" -gt 0 ]; then
+    note "k3dlamp creates clusters with k3d or kind, which run them in Docker. Not found on PATH:"
+    printf '  %s\n' "${missing[@]}"
+  fi
 }
 
 main() {
@@ -135,13 +147,7 @@ EOF
       "$dest/chrome-sandbox" "$dest/chrome-sandbox"
   fi
 
-  local missing=()
-  for tool in k3d docker; do
-    command -v "$tool" >/dev/null || missing+=("$tool")
-  done
-  if [ "${#missing[@]}" -gt 0 ]; then
-    note "k3dlamp creates clusters with k3d and Docker. Not found on PATH: ${missing[*]}"
-  fi
+  check_tools
 
   case ":$PATH:" in
     *":$bin_dir:"*) note "Start it with: k3dlamp" ;;
