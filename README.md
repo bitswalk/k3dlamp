@@ -100,17 +100,21 @@ Needs only Docker. Both steps run in containers.
 12. At start, the update check reads k3dlamp's releases, and a newer one brings up the notice, with bitswalk red buttons.
 13. **Settings → Updates** shows the setting the notice's bell turned off, and its switch turns the check back on and off. In French, the page and its sidebar entry are translated.
 14. After an upgrade, the app shows the new release's notes once, without the install steps.
-15. The Plugin Catalog installs the kind plugin from Artifact Hub. Removing a cluster from the home page leaves no `~/.kube/config.lock` behind. With kind on `PATH`, **Add cluster** brings up `local-aio`, one kind node, and the app lists the node of `kind-local-aio`. **Delete** removes the cluster and its context. The app asked consent once for each of the three kind commands. Deleting the plugin in **Settings → Plugins** never offers **Save & Apply**, and once the page reloads itself the plugin is gone from the page and from disk.
+15. The Plugin Catalog installs the kind plugin from Artifact Hub. Removing a cluster from the home page leaves no `~/.kube/config.lock` behind. With kind on `PATH`, **Add cluster** brings up `local-aio`, one kind node, and the app lists the node of `kind-local-aio`. Its row shows the cluster as Active, with its Kubernetes version, and **Actions → Delete** removes the cluster and its context. The app asked consent once for each of the three kind commands. Deleting the plugin in **Settings → Plugins** never offers **Save & Apply**, and once the page reloads itself the plugin is gone from the page and from disk.
 
 The specs answer the native install and consent dialogs as a user accepting them would, and record each one. Steps 3 and 15 install from the live Artifact Hub, so the tests need internet access. Steps 12 to 14 answer the update check with stub releases instead of GitHub's.
 
-A k3dlamp release and a k3d plugin release that depend on each other can't both be on Artifact Hub before the tests run. To test them together, pass the plugin's build:
+A k3dlamp release and a plugin release that depend on each other can't both be on Artifact Hub before the tests run. The specs also follow the plugins' pages, so a plugin release that changes its page must be tested before it is published. In either case, pass the plugin's build:
 
 ```bash
 K3D_PLUGIN_MAIN_JS=/path/to/k3dlamp-k3d-plugin/dist/main.js ./scripts/test-headlamp.sh
 ```
 
-Step 3 still installs the plugin from Artifact Hub, then replaces its `main.js` with that build and records the build's digest in Headlamp's installation receipt. The plugin keeps its store identity, so it gets the same grants. Run the plain tests again once the plugin release is on Artifact Hub.
+```bash
+KIND_PLUGIN_MAIN_JS=/path/to/k3dlamp-kind-plugin/dist/main.js ./scripts/test-headlamp.sh
+```
+
+Steps 3 and 15 still install the plugin from Artifact Hub, then replace its `main.js` with that build and record the build's digest in Headlamp's installation receipt. The plugin keeps its store identity, so it gets the same grants. Run the plain tests again once the plugin release is on Artifact Hub.
 
 The test container runs privileged because it starts its own Docker daemon for k3d, so test clusters never touch the host's Docker. Screenshots, logs and an HTML report land in `out/e2e/`.
 

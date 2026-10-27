@@ -7,7 +7,7 @@
 #
 # K3D_PLUGIN_MAIN_JS=/path/to/dist/main.js runs the specs with that k3d plugin
 # build in place of the one Artifact Hub serves, to test both releases together
-# before either is published.
+# before either is published. KIND_PLUGIN_MAIN_JS does the same for the kind plugin.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -18,6 +18,9 @@ docker build -q -f test/e2e/Dockerfile -t headlamp-k3d-e2e . >/dev/null
 plugin_build=()
 if [ -n "${K3D_PLUGIN_MAIN_JS:-}" ]; then
   plugin_build=(-v "$(realpath "$K3D_PLUGIN_MAIN_JS"):/plugin/main.js:ro" -e K3D_PLUGIN_MAIN_JS=/plugin/main.js)
+fi
+if [ -n "${KIND_PLUGIN_MAIN_JS:-}" ]; then
+  plugin_build+=(-v "$(realpath "$KIND_PLUGIN_MAIN_JS"):/plugin/kind-main.js:ro" -e KIND_PLUGIN_MAIN_JS=/plugin/kind-main.js)
 fi
 
 rm -rf out/e2e

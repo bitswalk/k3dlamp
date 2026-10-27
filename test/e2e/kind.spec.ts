@@ -7,6 +7,7 @@
  */
 import { _electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -16,6 +17,8 @@ const store = { repository: 'bitswalk-k3dlamp-kind-plugin', package: 'k3dlamp-ki
 const pluginIdentity = '@bitswalk/headlamp-kind@k3dlamp-kind-plugin';
 const kubeconfig = path.join(os.homedir(), '.kube', 'config');
 const results = process.env.RESULTS_DIR ?? '/results';
+// A plugin build to test before Artifact Hub has it; see sideloadPluginBuild.
+const pluginBuild = process.env.KIND_PLUGIN_MAIN_JS;
 
 let app: ElectronApplication;
 let page: Page;
@@ -34,6 +37,18 @@ function prompts(): Promise<Prompt[]> {
 
 async function screenshot(name: string) {
   await page.screenshot({ path: path.join(results, 'screens', `${name}.png`) });
+}
+
+/** As in k3d.spec.ts: serve a local build of the store-installed kind plugin. */
+async function sideloadPluginBuild(build: string) {
+  const receipts = path.join(os.homedir(), '.config/k3dlamp/plugin-installation-receipts.json');
+  const store = JSON.parse(fs.readFileSync(receipts, 'utf8'));
+  const receipt = store.receipts.find((r: any) => r.package === 'k3dlamp-kind-plugin');
+  const main = fs.readFileSync(build);
+  fs.writeFileSync(path.join(receipt.inventoryPath, receipt.bundleName, 'main.js'), main);
+  receipt.files['main.js'] = crypto.createHash('sha256').update(main).digest('hex');
+  fs.writeFileSync(receipts, JSON.stringify(store, null, 2));
+  await page.reload();
 }
 
 async function go(route: string) {
@@ -116,6 +131,11 @@ test('installs the kind plugin from Artifact Hub through the Plugin Catalog', as
   expect(installs[0].detail).toContain(
     'https://github.com/bitswalk/k3dlamp-kind-plugin/releases/download/'
   );
+
+  if (pluginBuild) {
+    await sideloadPluginBuild(pluginBuild);
+    await expect(sidebarKind()).toBeVisible({ timeout: 120_000 });
+  }
 });
 
 test('leaves the kubeconfig unlocked after Headlamp removes a cluster from it', async () => {
@@ -176,7 +196,18 @@ test('creates a single-node cluster with Add cluster', async () => {
   await expect(page.getByRole('link', { name: 'kind-local-aio' }).first()).toBeVisible({
     timeout: 60_000,
   });
+  // The table shows what Headlamp's home page shows for the cluster.
+  const row = page.getByRole('row', { name: /kind-local-aio/ });
+  await expect(row).toContainText(`Kubeconfig: ${kubeconfig}`);
+  await expect(row).toContainText('Active', { timeout: 60_000 });
+  await expect(row).toContainText(/v\d+\.\d+\.\d+/);
+  // Still on the page that created it: the row links the cluster, and its
+  // Delete is enabled now that kind has finished.
+  await expect(row.getByRole('link', { name: 'kind-local-aio' })).toBeVisible();
+  await row.getByRole('button', { name: 'Actions' }).click();
+  await expect(page.getByRole('menuitem', { name: 'Delete' })).toBeEnabled();
   await screenshot('kind-2-created');
+  await page.keyboard.press('Escape');
 });
 
 test('operates the new cluster from Headlamp', async () => {
@@ -198,8 +229,9 @@ test('deletes the cluster', async () => {
   await go('/kind');
   await page
     .getByRole('row', { name: /kind-local-aio/ })
-    .getByRole('button', { name: 'Delete' })
+    .getByRole('button', { name: 'Actions' })
     .click();
+  await page.getByRole('menuitem', { name: 'Delete' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
 
   await expect(page.getByText('Cluster local-aio was deleted.')).toBeVisible({
