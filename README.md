@@ -94,7 +94,7 @@ Needs only Docker. Both steps run in containers.
 6. After k3d is copied onto `PATH`, **Retry** finds it.
 7. **Add cluster** brings up `local-aio`, a single k3s server, and `k3d-local-aio` appears in the app. **Custom cluster** then opens its editor on `local-aio-2`, takes `examples/single-node.yaml` as an upload, reports k3d's refusal of a name already in use, and keeps the draft for **Edit config**.
 8. The app lists the new cluster's node and pods. With the sidebar collapsed, the cluster's k3s version shows as major.minor and stays inside it, and each icon sits at the centre of its button and of the sidebar. The App Catalog finds cert-manager's chart.
-9. **Delete** removes the cluster and its kubeconfig context.
+9. The cluster's row shows it Active, with its k3s version, and Stopped once `k3d cluster stop` stops it. After `k3d cluster start`, **Actions → Delete** removes the cluster and its kubeconfig context.
 10. Renderer code without the plugin's capability cannot run k3d.
 11. The app asked consent exactly once for each of the three k3d commands.
 12. At start, the update check reads k3dlamp's releases, and a newer one brings up the notice, with bitswalk red buttons.

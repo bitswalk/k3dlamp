@@ -56,6 +56,11 @@ function noClusters() {
   return page.getByRole('heading', { name: 'No k3d clusters' });
 }
 
+/** The local-aio cluster's row in the k3d page's table. */
+function clusterRow() {
+  return page.getByRole('row', { name: /k3d-local-aio/ });
+}
+
 /** The custom cluster editor's text, as Monaco renders it. */
 function editorText() {
   return page.locator('.monaco-editor .view-lines');
@@ -242,7 +247,17 @@ test('creates a single-server cluster with Add cluster', async () => {
   await expect(page.getByRole('link', { name: 'k3d-local-aio' }).first()).toBeVisible({
     timeout: 60_000,
   });
+  const row = clusterRow();
+  await expect(row).toContainText(`Kubeconfig: ${kubeconfig}`);
+  await expect(row).toContainText('Active', { timeout: 60_000 });
+  await expect(row).toContainText(/v\d+\.\d+\.\d+\+k3s\d+/);
+  // Still on the page that created it: the row links the cluster, and its
+  // Delete is enabled now that k3d has finished.
+  await expect(row.getByRole('link', { name: 'k3d-local-aio' })).toBeVisible();
+  await row.getByRole('button', { name: 'Actions' }).click();
+  await expect(page.getByRole('menuitem', { name: 'Delete' })).toBeEnabled();
   await screenshot('4-created');
+  await page.keyboard.press('Escape');
 });
 
 test('creates from a custom config, and reports what k3d refuses', async () => {
@@ -347,13 +362,27 @@ test('finds Helm charts in the App Catalog', async () => {
   await screenshot('6-app-catalog');
 });
 
+test('says which clusters k3d stopped', async () => {
+  test.setTimeout(5 * 60_000);
+  execFileSync(k3dOnPath, ['cluster', 'stop', 'local-aio']);
+  try {
+    // The page lists k3d's clusters when it opens.
+    await go('/k3d');
+    await page.reload();
+    await expect(clusterRow()).toContainText('Stopped', { timeout: 60_000 });
+    await screenshot('6-stopped');
+  } finally {
+    execFileSync(k3dOnPath, ['cluster', 'start', 'local-aio']);
+  }
+  await page.reload();
+  await expect(clusterRow()).toContainText('Active', { timeout: 120_000 });
+});
+
 test('deletes the cluster', async () => {
   test.setTimeout(5 * 60_000);
   await go('/k3d');
-  await page
-    .getByRole('row', { name: /k3d-local-aio/ })
-    .getByRole('button', { name: 'Delete' })
-    .click();
+  await clusterRow().getByRole('button', { name: 'Actions' }).click();
+  await page.getByRole('menuitem', { name: 'Delete' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
 
   await expect(page.getByText('Cluster local-aio was deleted.')).toBeVisible({
