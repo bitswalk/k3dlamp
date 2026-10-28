@@ -321,8 +321,23 @@ async function checkCollapsedSidebar(version: Locator) {
   await expect(version).toHaveText(/^v\d+\.\d+$/);
   const sidebar = page.locator('.MuiDrawer-paper').first();
   await expect.poll(async () => (await sidebar.boundingBox())?.width).toBeLessThan(100);
-  const [button, drawer] = [await version.boundingBox(), await sidebar.boundingBox()];
-  expect(button!.x + button!.width).toBeLessThanOrEqual(drawer!.x + drawer!.width);
+  // The drawer is still narrowing, and once its list settles Headlamp may resize
+  // it again to fit the list's scrollbar. Measure once neither the drawer nor the
+  // button has moved for half a second, where the sidebar ends up.
+  let edges: number[] = [];
+  await expect
+    .poll(
+      async () => {
+        const [button, drawer] = [await version.boundingBox(), await sidebar.boundingBox()];
+        const previous = edges;
+        edges = [button!.x + button!.width, drawer!.x + drawer!.width];
+        return edges.every((edge, i) => edge === previous[i]);
+      },
+      { intervals: [500] }
+    )
+    .toBe(true);
+  const [buttonEnd, drawerEnd] = edges;
+  expect(buttonEnd).toBeLessThanOrEqual(drawerEnd);
   expect(await sidebar.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
   // Each icon sits at the centre of its button, which highlights on hover, and of
   // the sidebar's list. Headlamp alone puts it 2.5px left of both.
