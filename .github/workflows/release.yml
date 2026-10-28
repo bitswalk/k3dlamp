@@ -93,7 +93,7 @@ jobs:
           curl -fsSL https://github.com/bitswalk/k3dlamp/releases/download/$GITHUB_REF_NAME/install.sh | bash
           \`\`\`
 
-          Then install the k3d plugin from **Plugin Catalog** in the sidebar, as the [README](https://github.com/bitswalk/k3dlamp#install) describes. Requires Linux x86_64, with Docker and k3d on \`PATH\` to create clusters.
+          Then install the k3d plugin, the kind plugin, or both, from **Plugin Catalog** in the sidebar, as the [README](https://github.com/bitswalk/k3dlamp#install) describes. Requires Linux x86_64, with Docker and k3d or kind on \`PATH\` to create clusters.
           EOF
           gh release create "$GITHUB_REF_NAME" dist/* \
             --title "$GITHUB_REF_NAME" --notes-file notes.md --verify-tag
