@@ -1,6 +1,6 @@
 # k3dlamp
 
-A Headlamp Desktop build that creates and operates k3d and kind clusters. It is upstream Headlamp, built from a pinned release with this repository's product manifest, bitswalk branding and seven patches. The manifest lets the [k3d plugin](https://github.com/bitswalk/k3dlamp-k3d-plugin) and the [kind plugin](https://github.com/bitswalk/k3dlamp-kind-plugin), which users install from Artifact Hub, run k3d and kind.
+A Headlamp Desktop build that creates and operates k3d and kind clusters. It is upstream Headlamp, built from a pinned release with this repository's product manifest, bitswalk branding and eight patches. The manifest lets the [k3d plugin](https://github.com/bitswalk/k3dlamp-k3d-plugin) and the [kind plugin](https://github.com/bitswalk/k3dlamp-kind-plugin), which users install from Artifact Hub, run k3d and kind.
 
 Open **k3d** in the sidebar and click **Add cluster** for a cluster with one k3s server, or **Custom cluster** to write or upload a k3d config first. The cluster appears in the cluster list as `k3d-<name>`, ready to browse like any other cluster. The kind plugin's **kind** page works the same way, for clusters that appear as `kind-<name>`.
 
@@ -26,6 +26,10 @@ Then install the k3d plugin, the kind plugin, or both, from inside k3dlamp. kind
 
 To create clusters, the kind plugin needs Docker and [kind](https://kind.sigs.k8s.io) on `PATH`, as the k3d plugin needs k3d. The first time a plugin lists, creates or deletes clusters, k3dlamp asks you to allow that command. It remembers each answer.
 
+### Logs
+
+**Settings → Logs** shows what k3dlamp and its backend logged since k3dlamp started, such as the error behind an "Internal Server Error" notice. Filter it by severity, search it, or copy or download it for a bug report. k3dlamp keeps the latest lines in memory only, errors and warnings separately so routine lines can't push them out. It leaves out the backend's line for each request it serves, which holds only a duration. All lines, those included, still go to k3dlamp's standard output and error. On desktops that start apps under systemd, such as KDE Plasma and GNOME, `journalctl --user -t k3dlamp` reads them.
+
 ### Updates
 
 When k3dlamp starts, it checks this repository's releases. If a newer one is out, a notice links to its release page; run the installer again to upgrade. After an upgrade, k3dlamp shows the new release's notes once. k3dlamp never downloads or installs anything itself.
@@ -40,7 +44,7 @@ curl -fsSL https://github.com/bitswalk/k3dlamp/releases/latest/download/install.
 
 ## How it differs from Headlamp
 
-The build makes three kinds of change. Branding replaces Headlamp's logo, icons, colours and name in the UI; see [Branding](#branding). Patches add the **Settings → Updates** page, fix the collapsed sidebar's cluster version and icon alignment, let the plugins hand k3d and kind a cluster config on standard input, keep **Settings → Plugins** from abandoning a plugin delete, lock the kubeconfig the way kind and kubectl expect, and let the App Catalog install charts from OCI registries; see [Patches](#patches). Everything else comes from [`app-build-manifest.json`](app-build-manifest.json), which Headlamp's build selects with `HEADLAMP_BUILD_MANIFEST`:
+The build makes three kinds of change. Branding replaces Headlamp's logo, icons, colours and name in the UI; see [Branding](#branding). Patches add the **Settings → Updates** and **Settings → Logs** pages, fix the collapsed sidebar's cluster version and icon alignment, let the plugins hand k3d and kind a cluster config on standard input, keep **Settings → Plugins** from abandoning a plugin delete, lock the kubeconfig the way kind and kubectl expect, and let the App Catalog install charts from OCI registries; see [Patches](#patches). Everything else comes from [`app-build-manifest.json`](app-build-manifest.json), which Headlamp's build selects with `HEADLAMP_BUILD_MANIFEST`:
 
 | Setting | Effect |
 | --- | --- |
@@ -101,6 +105,7 @@ Needs only Docker. Both steps run in containers.
 13. **Settings → Updates** shows the setting the notice's bell turned off, and its switch turns the check back on and off. In French, the page and its sidebar entry are translated.
 14. After an upgrade, the app shows the new release's notes once, without the install steps.
 15. The Plugin Catalog installs the kind plugin from Artifact Hub. Removing a cluster from the home page leaves no `~/.kube/config.lock` behind. With kind on `PATH`, **Add cluster** brings up `local-aio`, one kind node, and the app lists the node of `kind-local-aio`. Its row shows the cluster as Active, with its Kubernetes version, and **Actions → Delete** removes the cluster and its context. The app asked consent once for each of the three kind commands. Deleting the plugin in **Settings → Plugins** never offers **Save & Apply**, and once the page reloads itself the plugin is gone from the page and from disk.
+16. **Settings → Logs** shows the backend's and the main process's startup lines, picks up a line the main process logs while the page is open, and leaves out the per-request timing lines. Its severity filter hides the INFO lines.
 
 The specs answer the native install and consent dialogs as a user accepting them would, and record each one. Steps 3 and 15 install from the live Artifact Hub, so the tests need internet access. Steps 12 to 14 answer the update check with stub releases instead of GitHub's.
 
@@ -158,6 +163,7 @@ docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD/branding:/brand
 | `0005-plugin-delete-before-save.patch` | Keeps **Settings → Plugins** from offering **Save & Apply** for a plugin delete, and disables it while any delete runs. The delete waits out a 5-second cancellation window before it reaches the backend, and saving reloads the page, so saving in that window abandoned the delete. A successful delete reloads the page itself |
 | `0006-kubeconfig-lock-file.patch` | Locks the kubeconfig the way client-go, kubectl and kind do: by creating `~/.kube/config.lock` exclusively, waiting while another program holds it, and removing it when done. Headlamp held an `flock` on that file instead and left it behind, so after Headlamp's first kubeconfig edit kind created clusters but failed to add them to the kubeconfig |
 | `0007-helm-oci-repositories.patch` | Lets the App Catalog install a chart whose Artifact Hub repository URL is `oci://`, such as `oci://ghcr.io/naval-group/kubevirt-stack-charts/kubevirt`. Adding such a repository failed with a 500, because Headlamp downloaded every repository's index and an OCI registry has none. Headlamp now records an `oci://` repository without an index. Install and upgrade pull `<repo>/<chart>` from the registry, signing in with the credentials `helm registry login` saves. The upgrade dialog lists versions only from indexes, so it offers none for these charts |
+| `0008-settings-logs-page.patch` | Adds **Settings → Logs**, desktop app only. The main process keeps the backend's output and its own console output in memory, 5,000 routine lines and 1,000 errors and warnings, and drops the backend's per-request timing lines. The page reads new lines every two seconds into the log viewer that pod logs use, with its severity filter, find, copy and download. Downloads, pod logs' included, leave out colour codes. Before this page, the backend's errors reached only standard error, and the UI showed a bare "Internal Server Error" |
 
 To change a patch, apply them all to a checkout of the pinned tag, edit, and write each one back with `git diff`. Keep the description lines at the top of the file. A new UI string goes into `translations.json` for every language. Languages Headlamp itself barely translates, currently Hebrew, Hindi and both Portuguese variants, get empty strings, so they fall back to English like the rest of their UI.
 

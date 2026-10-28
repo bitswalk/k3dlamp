@@ -3,131 +3,183 @@
   "ar": {
     "Updates": "التحديثات",
     "Check for updates at startup": "التحقق من وجود تحديثات عند بدء التشغيل",
-    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "عند صدور إصدار أحدث، يظهر إشعار يحتوي على رابط إليه. تُطبَّق التغييرات عند تشغيل التطبيق في المرة القادمة."
+    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "عند صدور إصدار أحدث، يظهر إشعار يحتوي على رابط إليه. تُطبَّق التغييرات عند تشغيل التطبيق في المرة القادمة.",
+    "Logs": "السجلات",
+    "What the app and its backend logged since the app started. The app keeps these lines in memory only, and leaves out the backend's per-request timing lines.": "ما سجّله التطبيق وخادمه الخلفي منذ بدء تشغيل التطبيق. يحتفظ التطبيق بهذه الأسطر في الذاكرة فقط، ويستبعد أسطر توقيت كل طلب التي يكتبها الخادم الخلفي."
   },
   "bn": {
     "Updates": "আপডেট",
     "Check for updates at startup": "চালু হওয়ার সময় আপডেট পরীক্ষা করুন",
-    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "নতুন রিলিজ প্রকাশিত হলে একটি বিজ্ঞপ্তিতে তার লিঙ্ক দেখানো হবে। পরিবর্তনগুলি অ্যাপটি পরের বার চালু হলে কার্যকর হবে।"
+    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "নতুন রিলিজ প্রকাশিত হলে একটি বিজ্ঞপ্তিতে তার লিঙ্ক দেখানো হবে। পরিবর্তনগুলি অ্যাপটি পরের বার চালু হলে কার্যকর হবে।",
+    "Logs": "লগ",
+    "What the app and its backend logged since the app started. The app keeps these lines in memory only, and leaves out the backend's per-request timing lines.": "অ্যাপ চালু হওয়ার পর থেকে অ্যাপ ও এর ব্যাকএন্ড যা লগ করেছে। অ্যাপ এই লাইনগুলো শুধু মেমরিতে রাখে, এবং ব্যাকএন্ডের প্রতিটি অনুরোধের সময়ের লাইনগুলো বাদ দেয়।"
   },
   "cs": {
     "Updates": "Aktualizace",
     "Check for updates at startup": "Kontrolovat aktualizace při spuštění",
-    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "Když vyjde novější verze, zobrazí se oznámení s odkazem na ni. Změny se projeví při příštím spuštění aplikace."
+    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "Když vyjde novější verze, zobrazí se oznámení s odkazem na ni. Změny se projeví při příštím spuštění aplikace.",
+    "Logs": "Protokoly",
+    "What the app and its backend logged since the app started. The app keeps these lines in memory only, and leaves out the backend's per-request timing lines.": "Co aplikace a její backend zaznamenaly od spuštění aplikace. Aplikace tyto řádky uchovává jen v paměti a vynechává řádky backendu s dobou trvání jednotlivých požadavků."
   },
   "de": {
     "Updates": "Updates",
     "Check for updates at startup": "Beim Start nach Updates suchen",
-    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "Wenn eine neuere Version erscheint, verweist ein Hinweis darauf. Änderungen werden beim nächsten Start der App wirksam."
+    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "Wenn eine neuere Version erscheint, verweist ein Hinweis darauf. Änderungen werden beim nächsten Start der App wirksam.",
+    "Logs": "Protokolle",
+    "What the app and its backend logged since the app started. The app keeps these lines in memory only, and leaves out the backend's per-request timing lines.": "Was die App und ihr Backend seit dem Start der App protokolliert haben. Die App hält diese Zeilen nur im Arbeitsspeicher und lässt die Zeitangaben des Backends zu einzelnen Anfragen weg."
   },
   "en": {
     "Updates": "Updates",
     "Check for updates at startup": "Check for updates at startup",
-    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "When a newer release is out, a notice links to it. Changes apply the next time the app starts."
+    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "When a newer release is out, a notice links to it. Changes apply the next time the app starts.",
+    "Logs": "Logs",
+    "What the app and its backend logged since the app started. The app keeps these lines in memory only, and leaves out the backend's per-request timing lines.": "What the app and its backend logged since the app started. The app keeps these lines in memory only, and leaves out the backend's per-request timing lines."
   },
   "es": {
     "Updates": "Actualizaciones",
     "Check for updates at startup": "Buscar actualizaciones al iniciar",
-    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "Cuando haya una versión más reciente, un aviso enlazará a ella. Los cambios se aplican la próxima vez que se inicie la aplicación."
+    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "Cuando haya una versión más reciente, un aviso enlazará a ella. Los cambios se aplican la próxima vez que se inicie la aplicación.",
+    "Logs": "Registros",
+    "What the app and its backend logged since the app started. The app keeps these lines in memory only, and leaves out the backend's per-request timing lines.": "Lo que la aplicación y su backend han registrado desde que se inició la aplicación. La aplicación guarda estas líneas solo en memoria y omite las líneas del backend con la duración de cada solicitud."
   },
   "fr": {
     "Updates": "Mises à jour",
     "Check for updates at startup": "Rechercher les mises à jour au démarrage",
-    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "Lorsqu'une version plus récente est disponible, une notification propose un lien vers celle-ci. Les changements prennent effet au prochain démarrage de l'application."
+    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "Lorsqu'une version plus récente est disponible, une notification propose un lien vers celle-ci. Les changements prennent effet au prochain démarrage de l'application.",
+    "Logs": "Journaux",
+    "What the app and its backend logged since the app started. The app keeps these lines in memory only, and leaves out the backend's per-request timing lines.": "Ce que l'application et son backend ont journalisé depuis le démarrage de l'application. L'application conserve ces lignes en mémoire uniquement et omet les lignes du backend indiquant la durée de chaque requête."
   },
   "he": {
     "Updates": "",
     "Check for updates at startup": "",
-    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": ""
+    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "",
+    "Logs": "",
+    "What the app and its backend logged since the app started. The app keeps these lines in memory only, and leaves out the backend's per-request timing lines.": ""
   },
   "hi": {
     "Updates": "",
     "Check for updates at startup": "",
-    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": ""
+    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "",
+    "Logs": "",
+    "What the app and its backend logged since the app started. The app keeps these lines in memory only, and leaves out the backend's per-request timing lines.": ""
   },
   "hu": {
     "Updates": "Frissítések",
     "Check for updates at startup": "Frissítések keresése indításkor",
-    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "Ha újabb kiadás jelenik meg, egy értesítés hivatkozik rá. A módosítások az alkalmazás következő indításakor lépnek életbe."
+    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "Ha újabb kiadás jelenik meg, egy értesítés hivatkozik rá. A módosítások az alkalmazás következő indításakor lépnek életbe.",
+    "Logs": "Naplók",
+    "What the app and its backend logged since the app started. The app keeps these lines in memory only, and leaves out the backend's per-request timing lines.": "Amit az alkalmazás és a háttérrendszere naplózott az alkalmazás indulása óta. Az alkalmazás ezeket a sorokat csak a memóriában tárolja, és kihagyja a háttérrendszer kérésenkénti időtartam-sorait."
   },
   "id": {
     "Updates": "Pembaruan",
     "Check for updates at startup": "Periksa pembaruan saat memulai",
-    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "Saat rilis yang lebih baru tersedia, sebuah pemberitahuan akan menautkannya. Perubahan berlaku saat aplikasi dimulai berikutnya."
+    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "Saat rilis yang lebih baru tersedia, sebuah pemberitahuan akan menautkannya. Perubahan berlaku saat aplikasi dimulai berikutnya.",
+    "Logs": "Log",
+    "What the app and its backend logged since the app started. The app keeps these lines in memory only, and leaves out the backend's per-request timing lines.": "Apa yang dicatat aplikasi dan backend-nya sejak aplikasi dimulai. Aplikasi hanya menyimpan baris-baris ini di memori, dan tidak menyertakan baris durasi per permintaan dari backend."
   },
   "it": {
     "Updates": "Aggiornamenti",
     "Check for updates at startup": "Controlla gli aggiornamenti all'avvio",
-    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "Quando è disponibile una versione più recente, una notifica rimanda a essa. Le modifiche si applicano al prossimo avvio dell'app."
+    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "Quando è disponibile una versione più recente, una notifica rimanda a essa. Le modifiche si applicano al prossimo avvio dell'app.",
+    "Logs": "Log",
+    "What the app and its backend logged since the app started. The app keeps these lines in memory only, and leaves out the backend's per-request timing lines.": "Ciò che l'app e il suo backend hanno registrato dall'avvio dell'app. L'app conserva queste righe solo in memoria e tralascia le righe del backend con la durata di ogni richiesta."
   },
   "ja": {
     "Updates": "アップデート",
     "Check for updates at startup": "起動時にアップデートを確認する",
-    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "新しいリリースが公開されると、そのリリースへのリンクを含む通知が表示されます。変更は次回アプリを起動したときに適用されます。"
+    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "新しいリリースが公開されると、そのリリースへのリンクを含む通知が表示されます。変更は次回アプリを起動したときに適用されます。",
+    "Logs": "ログ",
+    "What the app and its backend logged since the app started. The app keeps these lines in memory only, and leaves out the backend's per-request timing lines.": "アプリの起動以降にアプリとそのバックエンドが記録した内容です。これらの行はメモリ内にのみ保持され、バックエンドがリクエストごとに記録する所要時間の行は含まれません。"
   },
   "ko": {
     "Updates": "업데이트",
     "Check for updates at startup": "시작 시 업데이트 확인",
-    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "새 릴리스가 나오면 해당 릴리스로 연결되는 알림이 표시됩니다. 변경 사항은 다음에 앱을 시작할 때 적용됩니다."
+    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "새 릴리스가 나오면 해당 릴리스로 연결되는 알림이 표시됩니다. 변경 사항은 다음에 앱을 시작할 때 적용됩니다.",
+    "Logs": "로그",
+    "What the app and its backend logged since the app started. The app keeps these lines in memory only, and leaves out the backend's per-request timing lines.": "앱이 시작된 이후 앱과 백엔드가 기록한 내용입니다. 앱은 이 줄을 메모리에만 보관하며, 백엔드가 요청마다 남기는 소요 시간 줄은 제외합니다."
   },
   "nl": {
     "Updates": "Updates",
     "Check for updates at startup": "Bij het opstarten op updates controleren",
-    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "Als er een nieuwere release is, verwijst een melding ernaar. Wijzigingen gaan in bij de volgende start van de app."
+    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "Als er een nieuwere release is, verwijst een melding ernaar. Wijzigingen gaan in bij de volgende start van de app.",
+    "Logs": "Logboeken",
+    "What the app and its backend logged since the app started. The app keeps these lines in memory only, and leaves out the backend's per-request timing lines.": "Wat de app en de backend hebben gelogd sinds de app is gestart. De app bewaart deze regels alleen in het geheugen en laat de regels van de backend met de duur van elk verzoek weg."
   },
   "pl": {
     "Updates": "Aktualizacje",
     "Check for updates at startup": "Sprawdzaj aktualizacje przy uruchamianiu",
-    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "Gdy pojawi się nowsza wersja, powiadomienie wskaże do niej link. Zmiany zostaną zastosowane przy następnym uruchomieniu aplikacji."
+    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "Gdy pojawi się nowsza wersja, powiadomienie wskaże do niej link. Zmiany zostaną zastosowane przy następnym uruchomieniu aplikacji.",
+    "Logs": "Dzienniki",
+    "What the app and its backend logged since the app started. The app keeps these lines in memory only, and leaves out the backend's per-request timing lines.": "To, co aplikacja i jej backend zapisały w dziennikach od uruchomienia aplikacji. Aplikacja przechowuje te wiersze tylko w pamięci i pomija wiersze backendu z czasem trwania poszczególnych żądań."
   },
   "pt": {
     "Updates": "",
     "Check for updates at startup": "",
-    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": ""
+    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "",
+    "Logs": "",
+    "What the app and its backend logged since the app started. The app keeps these lines in memory only, and leaves out the backend's per-request timing lines.": ""
   },
   "pt-br": {
     "Updates": "Atualizações",
     "Check for updates at startup": "Verificar atualizações ao iniciar",
-    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "Quando houver uma versão mais recente, um aviso trará um link para ela. As alterações valem a partir da próxima vez que o aplicativo for iniciado."
+    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "Quando houver uma versão mais recente, um aviso trará um link para ela. As alterações valem a partir da próxima vez que o aplicativo for iniciado.",
+    "Logs": "Registros",
+    "What the app and its backend logged since the app started. The app keeps these lines in memory only, and leaves out the backend's per-request timing lines.": "O que o aplicativo e seu backend registraram desde que o aplicativo foi iniciado. O aplicativo mantém essas linhas apenas na memória e omite as linhas do backend com a duração de cada requisição."
   },
   "pt-pt": {
     "Updates": "",
     "Check for updates at startup": "",
-    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": ""
+    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "",
+    "Logs": "",
+    "What the app and its backend logged since the app started. The app keeps these lines in memory only, and leaves out the backend's per-request timing lines.": ""
   },
   "ru": {
     "Updates": "Обновления",
     "Check for updates at startup": "Проверять обновления при запуске",
-    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "Когда выходит новая версия, появляется уведомление со ссылкой на неё. Изменения вступят в силу при следующем запуске приложения."
+    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "Когда выходит новая версия, появляется уведомление со ссылкой на неё. Изменения вступят в силу при следующем запуске приложения.",
+    "Logs": "Журналы",
+    "What the app and its backend logged since the app started. The app keeps these lines in memory only, and leaves out the backend's per-request timing lines.": "Что приложение и его серверная часть записали в журнал с момента запуска приложения. Приложение хранит эти строки только в памяти и не показывает строки серверной части с длительностью каждого запроса."
   },
   "sv": {
     "Updates": "Uppdateringar",
     "Check for updates at startup": "Sök efter uppdateringar vid start",
-    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "När en nyare version finns visas ett meddelande med en länk till den. Ändringarna gäller från nästa gång appen startar."
+    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "När en nyare version finns visas ett meddelande med en länk till den. Ändringarna gäller från nästa gång appen startar.",
+    "Logs": "Loggar",
+    "What the app and its backend logged since the app started. The app keeps these lines in memory only, and leaves out the backend's per-request timing lines.": "Det som appen och dess backend har loggat sedan appen startade. Appen sparar raderna endast i minnet och utelämnar backendens rader med tiden för varje enskild förfrågan."
   },
   "ta": {
     "Updates": "புதுப்பிப்புகள்",
     "Check for updates at startup": "தொடங்கும்போது புதுப்பிப்புகளைச் சரிபார்",
-    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "புதிய வெளியீடு வந்தால், அதற்கான இணைப்புடன் ஒரு அறிவிப்பு தோன்றும். மாற்றங்கள் அடுத்த முறை பயன்பாடு தொடங்கும்போது நடைமுறைக்கு வரும்."
+    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "புதிய வெளியீடு வந்தால், அதற்கான இணைப்புடன் ஒரு அறிவிப்பு தோன்றும். மாற்றங்கள் அடுத்த முறை பயன்பாடு தொடங்கும்போது நடைமுறைக்கு வரும்.",
+    "Logs": "லாக்ஸ்",
+    "What the app and its backend logged since the app started. The app keeps these lines in memory only, and leaves out the backend's per-request timing lines.": "பயன்பாடு தொடங்கியதிலிருந்து பயன்பாடும் அதன் பின்தளமும் பதிவு செய்தவை. இந்த வரிகளைப் பயன்பாடு நினைவகத்தில் மட்டுமே வைத்திருக்கும், மேலும் பின்தளம் ஒவ்வொரு கோரிக்கைக்கும் எழுதும் நேர வரிகளைச் சேர்க்காது."
   },
   "tr": {
     "Updates": "Güncelleştirmeler",
     "Check for updates at startup": "Başlangıçta güncelleştirmeleri denetle",
-    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "Daha yeni bir sürüm yayımlandığında, bir bildirim ona bağlantı verir. Değişiklikler, uygulama bir sonraki başlatılışında geçerli olur."
+    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "Daha yeni bir sürüm yayımlandığında, bir bildirim ona bağlantı verir. Değişiklikler, uygulama bir sonraki başlatılışında geçerli olur.",
+    "Logs": "Günlükler",
+    "What the app and its backend logged since the app started. The app keeps these lines in memory only, and leaves out the backend's per-request timing lines.": "Uygulama başladığından beri uygulamanın ve arka ucunun günlüğe kaydettikleri. Uygulama bu satırları yalnızca bellekte tutar ve arka ucun her istek için yazdığı süre satırlarını dışarıda bırakır."
   },
   "ur": {
     "Updates": "اپ ڈیٹس",
     "Check for updates at startup": "شروع ہونے پر اپ ڈیٹس چیک کریں",
-    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "جب کوئی نیا ریلیز آئے گا تو ایک اطلاع اس کا لنک دکھائے گی۔ تبدیلیاں اگلی بار ایپ شروع ہونے پر لاگو ہوں گی۔"
+    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "جب کوئی نیا ریلیز آئے گا تو ایک اطلاع اس کا لنک دکھائے گی۔ تبدیلیاں اگلی بار ایپ شروع ہونے پر لاگو ہوں گی۔",
+    "Logs": "لاگز",
+    "What the app and its backend logged since the app started. The app keeps these lines in memory only, and leaves out the backend's per-request timing lines.": "ایپ شروع ہونے کے بعد سے ایپ اور اس کے بیک اینڈ نے جو کچھ لاگ کیا۔ ایپ یہ لائنیں صرف میموری میں رکھتی ہے، اور بیک اینڈ کی ہر درخواست کے دورانیے والی لائنیں شامل نہیں کرتی۔"
   },
   "zh": {
     "Updates": "更新",
     "Check for updates at startup": "启动时检查更新",
-    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "有更新的版本发布时，通知中会提供其链接。更改将在下次启动应用时生效。"
+    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "有更新的版本发布时，通知中会提供其链接。更改将在下次启动应用时生效。",
+    "Logs": "日志",
+    "What the app and its backend logged since the app started. The app keeps these lines in memory only, and leaves out the backend's per-request timing lines.": "自应用启动以来，应用及其后端记录的日志。应用仅在内存中保留这些行，并略去后端为每个请求记录的耗时行。"
   },
   "zh-tw": {
     "Updates": "更新",
     "Check for updates at startup": "啟動時檢查更新",
-    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "有較新的版本發佈時，通知會提供其連結。變更將在下次啟動應用程式時生效。"
+    "When a newer release is out, a notice links to it. Changes apply the next time the app starts.": "有較新的版本發佈時，通知會提供其連結。變更將在下次啟動應用程式時生效。",
+    "Logs": "日誌",
+    "What the app and its backend logged since the app started. The app keeps these lines in memory only, and leaves out the backend's per-request timing lines.": "自應用程式啟動以來，應用程式及其後端記錄的日誌。應用程式僅在記憶體中保留這些行，並略去後端為每個請求記錄的耗時行。"
   }
 }

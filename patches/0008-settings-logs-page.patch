@@ -1,0 +1,1079 @@
+Settings: add a Logs page that shows what the desktop app and its backend logged.
+The main process keeps the backend's output and its own console output in
+memory, errors and warnings apart so routine lines can't push them out, and
+drops the backend's per-request timing lines, which carry only a duration.
+Settings → Logs reads them every two seconds into the log viewer pod logs use,
+with its severity filter, find, copy and download. Downloads leave out colour
+codes, for pod logs too.
+
+diff --git a/app/electron/appLogs.test.ts b/app/electron/appLogs.test.ts
+new file mode 100644
+index 0000000..e1b6a04
+--- /dev/null
++++ b/app/electron/appLogs.test.ts
+@@ -0,0 +1,177 @@
++/*
++ * Copyright 2026 bitswalk
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ * http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++import { describe, expect, it, vi } from 'vitest';
++import { AppLogBuffer, captureConsole, classify, MAX_LINE_LENGTH } from './appLogs';
++
++const time = '2026-10-28T16:25:00.000Z';
++const fixedTime = () => new Date(time);
++const request = '{"level":"info","duration_ms":"0.56","message":"Request completed successfully"}';
++const dispatch = '{"level":"info","message":"Dispatching helm repository operation: AddRepo"}';
++const repoError =
++  '{"level":"error","source":"github.com/kubernetes-sigs/headlamp/backend/pkg/helm/repository.go",' +
++  '"line":192,"error":"failed to perform \\"FetchReference\\" on source: invalid reference",' +
++  '"message":"downloading index file"}';
++
++describe('classify', () => {
++  it('reads the zerolog level', () => {
++    expect(classify(repoError)).toBe('problem');
++    expect(classify('{"level":"warn","message":"slow"}')).toBe('problem');
++    expect(classify(dispatch)).toBe('routine');
++  });
++
++  it('skips the per-request timing lines', () => {
++    expect(classify(request)).toBe('skip');
++    expect(classify('{"level":"error","message":"Request completed successfully"}')).toBe(
++      'problem'
++    );
++  });
++
++  it('reads the klog prefix', () => {
++    expect(classify('E1028 16:20:27.439618   30283 reflector.go:1] "failed"')).toBe('problem');
++    expect(classify('W1028 16:20:27.439618   30283 warnings.go:107] "x"')).toBe('problem');
++    expect(classify('I1028 16:20:27.439618   30283 warnings.go:107] "x"')).toBe('routine');
++  });
++
++  it('treats other lines as routine', () => {
++    expect(classify('HEADLAMP_BACKEND_READY')).toBe('routine');
++    expect(classify('{not json')).toBe('routine');
++    expect(classify('{"message":"no level"}')).toBe('routine');
++  });
++});
++
++describe('AppLogBuffer', () => {
++  it('splits backend chunks into lines and joins lines split across chunks', () => {
++    const logs = new AppLogBuffer(fixedTime);
++
++    logs.writeBackend('stderr', Buffer.from(`${dispatch}\n${request}\n{"level":"info",`));
++    logs.writeBackend('stderr', '"message":"second"}\r\n\n');
++    logs.writeBackend('stdout', 'HEADLAMP_BACKEND_READY\n');
++
++    expect(logs.since()).toEqual([
++      { seq: 1, time, source: 'backend', text: dispatch },
++      { seq: 2, time, source: 'backend', text: '{"level":"info","message":"second"}' },
++      { seq: 3, time, source: 'backend', text: 'HEADLAMP_BACKEND_READY' },
++    ]);
++  });
++
++  it('keeps the two streams apart while a line is incomplete', () => {
++    const logs = new AppLogBuffer(fixedTime);
++
++    logs.writeBackend('stdout', 'out-');
++    logs.writeBackend('stderr', 'err-');
++    logs.writeBackend('stdout', 'line\n');
++    logs.writeBackend('stderr', 'line\n');
++
++    expect(logs.since().map(entry => entry.text)).toEqual(['out-line', 'err-line']);
++  });
++
++  it('records app messages as JSON lines', () => {
++    const logs = new AppLogBuffer(fixedTime);
++    logs.writeApp('error', 'server process process exited with code:1 signal:null');
++
++    expect(logs.since()).toEqual([
++      {
++        seq: 1,
++        time,
++        source: 'app',
++        text: '{"level":"error","message":"server process process exited with code:1 signal:null"}',
++      },
++    ]);
++  });
++
++  it('returns only lines newer than the given sequence number', () => {
++    const logs = new AppLogBuffer(fixedTime);
++    logs.writeBackend('stderr', `${dispatch}\n${repoError}\n${dispatch}\n`);
++
++    expect(logs.since(1).map(entry => entry.seq)).toEqual([2, 3]);
++    expect(logs.since(3)).toEqual([]);
++  });
++
++  it('keeps errors after ordinary lines have filled the buffer many times over', () => {
++    const logs = new AppLogBuffer(fixedTime);
++    logs.writeBackend('stderr', `${repoError}\n`);
++    for (let i = 0; i < 20; i++) {
++      logs.writeBackend('stderr', `${dispatch}\n`.repeat(1000));
++    }
++
++    const entries = logs.since();
++    expect(entries).toHaveLength(5001);
++    expect(entries[0]).toMatchObject({ seq: 1, text: repoError });
++    expect(entries[1].seq).toBe(20001 - 5000 + 1);
++    expect(entries[entries.length - 1].seq).toBe(20001);
++  });
++
++  it('drops the oldest errors once a thousand newer ones arrive', () => {
++    const logs = new AppLogBuffer(fixedTime);
++    for (let i = 0; i < 1001; i++) {
++      logs.writeBackend('stderr', `{"level":"error","message":"${i}"}\n`);
++    }
++
++    const entries = logs.since();
++    expect(entries).toHaveLength(1000);
++    expect(entries[0].text).toBe('{"level":"error","message":"1"}');
++  });
++
++  it('cuts very long lines, including one that never ends', () => {
++    const logs = new AppLogBuffer(fixedTime);
++    logs.writeBackend('stderr', `${'a'.repeat(MAX_LINE_LENGTH + 10)}\n`);
++    logs.writeBackend('stdout', 'b'.repeat(MAX_LINE_LENGTH + 10));
++
++    expect(logs.since().map(entry => entry.text.length)).toEqual([
++      MAX_LINE_LENGTH,
++      MAX_LINE_LENGTH,
++    ]);
++  });
++});
++
++describe('captureConsole', () => {
++  function fakeConsole() {
++    return { log: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as Console;
++  }
++
++  it('copies console output into the buffer and still prints it', () => {
++    const target = fakeConsole();
++    const { info: originalInfo, error: originalError } = target;
++    const logs = new AppLogBuffer(fixedTime);
++    captureConsole(logs, target);
++
++    target.info('App starting...');
++    target.log('plugins: %d', 3);
++    target.warn('slow');
++    target.error('server process process exited with code:%s signal:%s', 1, null);
++
++    expect(originalInfo).toHaveBeenCalledWith('App starting...');
++    expect(originalError).toHaveBeenCalledOnce();
++    expect(logs.since().map(entry => [entry.source, JSON.parse(entry.text)])).toEqual([
++      ['app', { level: 'info', message: 'App starting...' }],
++      ['app', { level: 'info', message: 'plugins: 3' }],
++      ['app', { level: 'warn', message: 'slow' }],
++      ['app', { level: 'error', message: 'server process process exited with code:1 signal:null' }],
++    ]);
++  });
++
++  it('leaves out the echo of backend output, which the buffer has already', () => {
++    const target = fakeConsole();
++    const logs = new AppLogBuffer(fixedTime);
++    captureConsole(logs, target);
++
++    target.info(`server process stdout: HEADLAMP_BACKEND_READY\n`);
++    target.error(`server process stderr: ${repoError}\n`);
++
++    expect(logs.since()).toEqual([]);
++  });
++});
+diff --git a/app/electron/appLogs.ts b/app/electron/appLogs.ts
+new file mode 100644
+index 0000000..26158a8
+--- /dev/null
++++ b/app/electron/appLogs.ts
+@@ -0,0 +1,175 @@
++/*
++ * Copyright 2026 bitswalk
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ * http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++import { format } from 'node:util';
++
++/** Which process wrote a line: the Go backend, or the app's main process. */
++export type AppLogSource = 'backend' | 'app';
++
++/** One log line, as Settings → Logs receives it. */
++export interface AppLogEntry {
++  /** Increases by one per line, so the renderer can ask only for newer lines. */
++  seq: number;
++  /** When the main process received the line, as an ISO 8601 string. */
++  time: string;
++  source: AppLogSource;
++  /**
++   * The line, cut to MAX_LINE_LENGTH characters. The backend writes one JSON
++   * object per line; the main process's lines are JSON objects of the same
++   * shape, with `level` and `message`.
++   */
++  text: string;
++}
++
++/** Longest line kept. The backend's lines are far shorter. */
++export const MAX_LINE_LENGTH = 16 * 1024;
++
++// The backend writes a line for every request it serves, several a second, so
++// errors and warnings get their own buffer. Otherwise ordinary lines would
++// push an error out soon after it happened.
++const ROUTINE_CAPACITY = 5000;
++const PROBLEM_CAPACITY = 1000;
++
++// zerolog's levels, and klog's one-letter prefix (as in
++// `E1028 16:20:27.439618 30283 file.go:107] ...`) for lines from client-go.
++const PROBLEM_LEVELS = new Set(['warn', 'warning', 'error', 'fatal', 'panic']);
++const KLOG_PROBLEM = /^[WEF]\d{4} /;
++
++// The backend logs this for every request, with only a duration: no method,
++// path or status. Thousands of them would bury everything else.
++const REQUEST_COMPLETED = 'Request completed successfully';
++
++/**
++ * Sorts a line into the buffer that keeps it, or 'skip' for the backend's
++ * per-request timing lines, which aren't kept.
++ */
++export function classify(text: string): 'problem' | 'routine' | 'skip' {
++  if (text.startsWith('{')) {
++    let line: { level?: unknown; message?: unknown };
++    try {
++      line = JSON.parse(text);
++    } catch {
++      return 'routine';
++    }
++    const level = typeof line?.level === 'string' ? line.level.toLowerCase() : '';
++    if (level === 'info' && line.message === REQUEST_COMPLETED) {
++      return 'skip';
++    }
++    return PROBLEM_LEVELS.has(level) ? 'problem' : 'routine';
++  }
++  return KLOG_PROBLEM.test(text) ? 'problem' : 'routine';
++}
++
++/** A fixed-size buffer that drops its oldest entry when full. */
++class Ring {
++  private entries: AppLogEntry[] = [];
++  private start = 0;
++
++  constructor(private readonly capacity: number) {}
++
++  push(entry: AppLogEntry) {
++    if (this.entries.length < this.capacity) {
++      this.entries.push(entry);
++      return;
++    }
++    this.entries[this.start] = entry;
++    this.start = (this.start + 1) % this.capacity;
++  }
++
++  /** Entries newer than afterSeq, oldest first. */
++  since(afterSeq: number): AppLogEntry[] {
++    const ordered = this.entries.slice(this.start).concat(this.entries.slice(0, this.start));
++    return ordered.filter(entry => entry.seq > afterSeq);
++  }
++}
++
++/**
++ * Keeps the latest log lines of the app and its backend in memory, for
++ * Settings → Logs. Nothing is written to disk.
++ */
++export class AppLogBuffer {
++  private seq = 0;
++  private readonly routine = new Ring(ROUTINE_CAPACITY);
++  private readonly problems = new Ring(PROBLEM_CAPACITY);
++  // A chunk can end mid-line. The rest of the line arrives with the next chunk.
++  private readonly partial: Record<'stdout' | 'stderr', string> = { stdout: '', stderr: '' };
++
++  constructor(private readonly now: () => Date = () => new Date()) {}
++
++  /** Adds a chunk of the backend's stdout or stderr, which may hold several lines. */
++  writeBackend(stream: 'stdout' | 'stderr', chunk: Buffer | string) {
++    const lines = (this.partial[stream] + chunk.toString()).split('\n');
++    this.partial[stream] = lines.pop() ?? '';
++    if (this.partial[stream].length > MAX_LINE_LENGTH) {
++      lines.push(this.partial[stream]);
++      this.partial[stream] = '';
++    }
++    lines
++      .map(line => line.replace(/\r$/, ''))
++      .filter(line => line.trim() !== '')
++      .forEach(line => this.add('backend', line));
++  }
++
++  /** Adds a message the main process logged. */
++  writeApp(level: 'info' | 'warn' | 'error', message: string) {
++    this.add('app', JSON.stringify({ level, message }));
++  }
++
++  /** Lines newer than afterSeq, oldest first. */
++  since(afterSeq = 0): AppLogEntry[] {
++    return this.routine
++      .since(afterSeq)
++      .concat(this.problems.since(afterSeq))
++      .sort((a, b) => a.seq - b.seq);
++  }
++
++  private add(source: AppLogSource, line: string) {
++    const kind = classify(line);
++    if (kind === 'skip') {
++      return;
++    }
++    const text = line.slice(0, MAX_LINE_LENGTH);
++    const entry = { seq: ++this.seq, time: this.now().toISOString(), source, text };
++    (kind === 'problem' ? this.problems : this.routine).push(entry);
++  }
++}
++
++// main.ts echoes each chunk of backend output to the console with this prefix.
++// writeBackend has those lines already, split one per line.
++const BACKEND_ECHO = /^server process std(out|err): /;
++
++/**
++ * Copies what the main process logs with console.log, info, warn and error
++ * into the buffer, as well as to the console.
++ */
++export function captureConsole(logs: AppLogBuffer, target: Console = console) {
++  const levels = [
++    ['log', 'info'],
++    ['info', 'info'],
++    ['warn', 'warn'],
++    ['error', 'error'],
++  ] as const;
++  for (const [method, level] of levels) {
++    const original = target[method].bind(target);
++    target[method] = (...args: unknown[]) => {
++      original(...args);
++      const message = format(...args);
++      if (!BACKEND_ECHO.test(message)) {
++        logs.writeApp(level, message);
++      }
++    };
++  }
++}
+diff --git a/app/electron/main.ts b/app/electron/main.ts
+index 3ac31a7..e490f5c 100644
+--- a/app/electron/main.ts
++++ b/app/electron/main.ts
+@@ -41,6 +41,7 @@ import {
+   readProductMetadata,
+   resolveBuildManifestPath,
+ } from '../scripts/build-manifest';
++import { AppLogBuffer, captureConsole } from './appLogs';
+ import { withBackendMemoryDefaults } from './backendMemory';
+ import {
+   observeInternalBackendReady,
+@@ -104,6 +105,10 @@ import {
+ 
+ const isDev = !!process.env.ELECTRON_DEV;
+ 
++/** The latest log lines of the app and its backend, for Settings → Logs. */
++const appLogs = new AppLogBuffer();
++captureConsole(appLogs);
++
+ if (process.env.APPIMAGE) {
+   app.commandLine.appendSwitch('disable-setuid-sandbox');
+ }
+@@ -1875,6 +1880,13 @@ function startElectron() {
+       readLegalDocument(legalDocumentsResourcePath, legalDocuments, id)
+     );
+ 
++    ipcMain.handle('get-app-logs', (event, afterSeq: unknown) => {
++      if (!isFromMainWindowFrame(event, mainWindow)) {
++        return [];
++      }
++      return appLogs.since(Number.isSafeInteger(afterSeq) ? (afterSeq as number) : 0);
++    });
++
+     ipcMain.on('pluginsLoaded', event => {
+       if (!isFromMainWindowFrame(event, mainWindow)) {
+         return;
+@@ -2099,10 +2111,12 @@ function attachServerEventHandlers(startedServerProcess: ChildProcessWithoutNull
+   });
+ 
+   startedServerProcess.stdout.on('data', data => {
++    appLogs.writeBackend('stdout', data);
+     console.info(`server process stdout: ${data}`);
+   });
+ 
+   startedServerProcess.stderr.on('data', data => {
++    appLogs.writeBackend('stderr', data);
+     const sterrMessage = `server process stderr: ${data}`;
+     if (data && data.indexOf && data.indexOf('Requesting') !== -1) {
+       // The server prints out urls it's getting, which aren't errors.
+diff --git a/app/electron/preload.test.ts b/app/electron/preload.test.ts
+index e3c7619..289fce3 100644
+--- a/app/electron/preload.test.ts
++++ b/app/electron/preload.test.ts
+@@ -86,6 +86,16 @@ describe('desktop preload API', () => {
+     });
+   });
+ 
++  it('reads the log lines newer than a sequence number', async () => {
++    const entries = [{ seq: 8, time: '2026-10-28T16:25:00.000Z', source: 'backend', text: '{}' }];
++    electronMocks.invoke.mockResolvedValue(entries);
++
++    await expect(desktopApi.getAppLogs(7)).resolves.toEqual(entries);
++    expect(electronMocks.invoke).toHaveBeenCalledWith('get-app-logs', 7);
++    await desktopApi.getAppLogs();
++    expect(electronMocks.invoke).toHaveBeenLastCalledWith('get-app-logs', 0);
++  });
++
+   it('exposes Electron development mode to a built renderer', () => {
+     expect(desktopApi.isDevelopment).toBe(true);
+   });
+diff --git a/app/electron/preload.ts b/app/electron/preload.ts
+index 420e5c1..22ca53b 100644
+--- a/app/electron/preload.ts
++++ b/app/electron/preload.ts
+@@ -15,6 +15,7 @@
+  */
+ 
+ import { contextBridge, ipcRenderer } from 'electron';
++import type { AppLogEntry } from './appLogs';
+ import type { LegalDocumentResult, LegalDocumentSummary } from './legal-documents';
+ 
+ // Keeps the mapping between a caller-provided listener and the wrapped one we
+@@ -196,4 +197,14 @@ contextBridge.exposeInMainWorld('desktopApi', {
+    */
+   getLegalDocument: (id: string): Promise<LegalDocumentResult> =>
+     ipcRenderer.invoke('get-legal-document', id),
++
++  /**
++   * Reads the latest log lines of the app and its backend, which the main
++   * process keeps in memory.
++   *
++   * @param afterSeq - Return only lines with a greater `seq`; 0 for all of them.
++   * @returns The lines, oldest first.
++   */
++  getAppLogs: (afterSeq = 0): Promise<AppLogEntry[]> =>
++    ipcRenderer.invoke('get-app-logs', afterSeq),
+ });
+diff --git a/frontend/src/components/App/Settings/AppLogs.test.tsx b/frontend/src/components/App/Settings/AppLogs.test.tsx
+new file mode 100644
+index 0000000..de1ab73
+--- /dev/null
++++ b/frontend/src/components/App/Settings/AppLogs.test.tsx
+@@ -0,0 +1,202 @@
++/*
++ * Copyright 2026 bitswalk
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ * http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++import { act, fireEvent, render, screen, within } from '@testing-library/react';
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import { TestContext } from '../../../test';
++import AppLogs, { AppLogEntry, formatLogLine, parseLogEntry } from './AppLogs';
++
++vi.mock('../../common/SectionBox', () => ({
++  default: ({ title, children }: { title: string; children: React.ReactNode }) => (
++    <section>
++      <h1>{title}</h1>
++      {children}
++    </section>
++  ),
++}));
++
++// The real viewer draws into an xterm canvas. This one shows the lines it gets
++// as plain text, without colours.
++vi.mock('../../common/LogViewer', () => ({
++  LogViewer: ({ logs, topActions }: { logs: string[]; topActions: React.ReactNode[] }) => (
++    <div>
++      {topActions}
++      <pre data-testid="logs">{logs.join('').replace(/\x1b\[[\d;]*m/g, '')}</pre>
++    </div>
++  ),
++}));
++
++const time = '2026-10-28T15:25:00.000Z';
++const repoError: AppLogEntry = {
++  seq: 2,
++  time,
++  source: 'backend',
++  text:
++    '{"level":"error","source":"github.com/kubernetes-sigs/headlamp/backend/pkg/helm/repository.go",' +
++    '"line":192,"error":"failed to perform \\"FetchReference\\" on source: invalid reference",' +
++    '"time":"2026-10-28T16:25:00+01:00","message":"downloading index file"}',
++};
++const dispatch: AppLogEntry = {
++  seq: 1,
++  time,
++  source: 'backend',
++  text: '{"level":"info","route":"/repositories","message":"Dispatching helm repository operation: AddRepo"}',
++};
++
++describe('parseLogEntry', () => {
++  it('reads a JSON line, with the error first among the fields', () => {
++    expect(parseLogEntry(repoError)).toEqual({
++      time: new Date(time),
++      source: 'backend',
++      severity: 'error',
++      message: 'downloading index file',
++      fields: [['error', '"failed to perform \\"FetchReference\\" on source: invalid reference"']],
++      location: 'pkg/helm/repository.go:192',
++    });
++    expect(parseLogEntry(dispatch).fields).toEqual([['route', '/repositories']]);
++  });
++
++  it('reads a klog line', () => {
++    const parsed = parseLogEntry({
++      seq: 1,
++      time,
++      source: 'backend',
++      text: 'W1028 16:20:27.439618   30283 warnings.go:107] "Warning: unrecognized format \\"int32\\""',
++    });
++
++    expect(parsed).toMatchObject({
++      severity: 'warn',
++      location: 'warnings.go:107',
++      message: '"Warning: unrecognized format \\"int32\\""',
++    });
++  });
++
++  it('keeps other lines as they are, at info level', () => {
++    for (const text of ['HEADLAMP_BACKEND_READY', '{not json', '[1, 2]', '{}']) {
++      const parsed = parseLogEntry({ seq: 1, time, source: 'app', text });
++      expect(parsed.severity).toBe('info');
++      expect(parsed.message).toBe(text === '{}' ? '' : text);
++    }
++  });
++
++  it('maps fatal and panic to error, and trace to debug', () => {
++    const level = (name: string) =>
++      parseLogEntry({ seq: 1, time, source: 'backend', text: `{"level":"${name}"}` }).severity;
++
++    expect([level('fatal'), level('panic'), level('WARNING'), level('trace')]).toEqual([
++      'error',
++      'error',
++      'warn',
++      'debug',
++    ]);
++  });
++});
++
++describe('formatLogLine', () => {
++  it('lays out time, severity, source, message, fields and location', () => {
++    const line = parseLogEntry(repoError);
++    line.time = new Date(2026, 9, 28, 16, 25, 0);
++
++    const formatted = formatLogLine(line);
++
++    expect(formatted).toContain('\x1b[1;31mERROR\x1b[0m');
++    expect(formatted.replace(/\x1b\[[\d;]*m/g, '')).toBe(
++      '2026-10-28 16:25:00 ERROR backend downloading index file ' +
++        'error="failed to perform \\"FetchReference\\" on source: invalid reference" ' +
++        'pkg/helm/repository.go:192\n'
++    );
++  });
++});
++
++describe('AppLogs', () => {
++  let getAppLogs: ReturnType<typeof vi.fn>;
++
++  beforeEach(() => {
++    vi.useFakeTimers();
++    getAppLogs = vi.fn();
++    window.desktopApi = { platform: 'linux', getAppLogs };
++  });
++
++  afterEach(() => {
++    vi.useRealTimers();
++    delete (window as Partial<Window>).desktopApi;
++  });
++
++  function renderLogs() {
++    render(
++      <TestContext>
++        <AppLogs />
++      </TestContext>
++    );
++  }
++
++  it('shows the lines it has, then asks only for newer ones', async () => {
++    getAppLogs.mockResolvedValueOnce([dispatch]).mockResolvedValueOnce([repoError]);
++    getAppLogs.mockResolvedValue([]);
++
++    renderLogs();
++    await act(() => vi.advanceTimersByTimeAsync(0));
++
++    expect(getAppLogs).toHaveBeenLastCalledWith(0);
++    expect(screen.getByTestId('logs')).toHaveTextContent('AddRepo');
++    expect(screen.getByTestId('logs')).not.toHaveTextContent('downloading index file');
++
++    await act(() => vi.advanceTimersByTimeAsync(2000));
++
++    expect(getAppLogs).toHaveBeenLastCalledWith(1);
++    expect(screen.getByTestId('logs')).toHaveTextContent('downloading index file');
++
++    await act(() => vi.advanceTimersByTimeAsync(2000));
++
++    expect(getAppLogs).toHaveBeenLastCalledWith(2);
++  });
++
++  it('filters by severity', async () => {
++    getAppLogs.mockResolvedValueOnce([dispatch, repoError]).mockResolvedValue([]);
++
++    renderLogs();
++    await act(() => vi.advanceTimersByTimeAsync(0));
++    fireEvent.mouseDown(screen.getByRole('combobox'));
++    fireEvent.click(within(screen.getByRole('listbox')).getByText('INFO'));
++
++    expect(screen.getByTestId('logs')).toHaveTextContent('downloading index file');
++    expect(screen.getByTestId('logs')).not.toHaveTextContent('AddRepo');
++  });
++
++  it('stops asking once the page closes', async () => {
++    getAppLogs.mockResolvedValue([]);
++
++    render(
++      <TestContext>
++        <AppLogs />
++      </TestContext>
++    ).unmount();
++    await act(() => vi.advanceTimersByTimeAsync(10000));
++
++    expect(getAppLogs).toHaveBeenCalledOnce();
++  });
++
++  it('keeps polling after a failed read', async () => {
++    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
++    getAppLogs.mockRejectedValueOnce(new Error('main process busy')).mockResolvedValue([dispatch]);
++
++    renderLogs();
++    await act(() => vi.advanceTimersByTimeAsync(2000));
++
++    expect(screen.getByTestId('logs')).toHaveTextContent('AddRepo');
++    consoleError.mockRestore();
++  });
++});
+diff --git a/frontend/src/components/App/Settings/AppLogs.tsx b/frontend/src/components/App/Settings/AppLogs.tsx
+new file mode 100644
+index 0000000..2bbf9db
+--- /dev/null
++++ b/frontend/src/components/App/Settings/AppLogs.tsx
+@@ -0,0 +1,276 @@
++/*
++ * Copyright 2026 bitswalk
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ * http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++import Box from '@mui/material/Box';
++import Checkbox from '@mui/material/Checkbox';
++import FormControl from '@mui/material/FormControl';
++import InputLabel from '@mui/material/InputLabel';
++import ListItemText from '@mui/material/ListItemText';
++import MenuItem from '@mui/material/MenuItem';
++import Select from '@mui/material/Select';
++import Typography from '@mui/material/Typography';
++import { useEffect, useMemo, useState } from 'react';
++import { useTranslation } from 'react-i18next';
++import { LogViewer } from '../../common/LogViewer';
++import { ALL_SEVERITIES, LogSeverity } from '../../common/Resource/logSeverityFilter';
++import SectionBox from '../../common/SectionBox';
++
++/** A log line the desktop app's main process kept. See app/electron/appLogs.ts. */
++export interface AppLogEntry {
++  seq: number;
++  /** When the main process received the line, as an ISO 8601 string. */
++  time: string;
++  /** The Go backend, or the app's main process. */
++  source: 'backend' | 'app';
++  /** Usually a JSON object with `level` and `message`, as the backend's logger writes. */
++  text: string;
++}
++
++/** A log line, split into the parts the page shows. */
++export interface ParsedLogLine {
++  time: Date;
++  source: AppLogEntry['source'];
++  severity: LogSeverity;
++  message: string;
++  /** The line's other fields, `error` first, as key and printable value. */
++  fields: [string, string][];
++  /** The file and line that logged it, when the line says. */
++  location?: string;
++}
++
++const POLL_INTERVAL_MS = 2000;
++// The main process keeps at most 6000 lines. This cap only matters when the
++// page stays open for a long time.
++const MAX_LINES = 10000;
++
++// klog, as client-go writes: `E1028 16:20:27.439618   30283 reflector.go:1] message`.
++const KLOG_LINE = /^([IWEF])\d{4} [\d:.]+\s+\d+ ([^\]]+)\] (.*)$/s;
++const KLOG_SEVERITY: Record<string, LogSeverity> = { I: 'info', W: 'warn', E: 'error', F: 'error' };
++// Fields the line shows in its own columns rather than as key=value pairs.
++const SHOWN_FIELDS = new Set(['level', 'time', 'message', 'source', 'line']);
++// The backend's source paths all start with this.
++const BACKEND_MODULE = /^github\.com\/kubernetes-sigs\/headlamp\/backend\//;
++
++function toSeverity(level: unknown): LogSeverity {
++  switch (typeof level === 'string' ? level.toLowerCase() : '') {
++    case 'error':
++    case 'fatal':
++    case 'panic':
++      return 'error';
++    case 'warn':
++    case 'warning':
++      return 'warn';
++    case 'debug':
++    case 'trace':
++      return 'debug';
++    default:
++      return 'info';
++  }
++}
++
++function printable(value: unknown): string {
++  if (typeof value === 'string') {
++    return /^[^\s"=]+$/.test(value) ? value : JSON.stringify(value);
++  }
++  return JSON.stringify(value);
++}
++
++/** Splits a line into its time, severity, message and fields. */
++export function parseLogEntry(entry: AppLogEntry): ParsedLogLine {
++  const parsed: ParsedLogLine = {
++    time: new Date(entry.time),
++    source: entry.source,
++    severity: 'info',
++    message: entry.text,
++    fields: [],
++  };
++
++  if (entry.text.startsWith('{')) {
++    let line: Record<string, unknown>;
++    try {
++      line = JSON.parse(entry.text);
++    } catch {
++      return parsed;
++    }
++    if (line === null || typeof line !== 'object' || Array.isArray(line)) {
++      return parsed;
++    }
++    const { level, message, source, line: lineNumber } = line;
++    parsed.severity = toSeverity(level);
++    parsed.message = typeof message === 'string' ? message : '';
++    if (typeof source === 'string') {
++      const file = source.replace(BACKEND_MODULE, '');
++      parsed.location = lineNumber === undefined ? file : `${file}:${lineNumber}`;
++    }
++    parsed.fields = Object.entries(line)
++      .filter(([key]) => !SHOWN_FIELDS.has(key))
++      .sort(([a], [b]) => Number(b === 'error') - Number(a === 'error'))
++      .map(([key, value]) => [key, printable(value)]);
++    return parsed;
++  }
++
++  const klog = KLOG_LINE.exec(entry.text);
++  if (klog) {
++    parsed.severity = KLOG_SEVERITY[klog[1]];
++    parsed.location = klog[2];
++    parsed.message = klog[3];
++  }
++  return parsed;
++}
++
++const ansi = (code: string, text: string) => `\x1b[${code}m${text}\x1b[0m`;
++const SEVERITY_STYLE: Record<LogSeverity, string> = {
++  error: '1;31',
++  warn: '1;33',
++  info: '36',
++  debug: '90',
++};
++
++function pad(n: number) {
++  return String(n).padStart(2, '0');
++}
++
++/** Formats a line for the terminal, coloured, and ending in a newline. */
++export function formatLogLine(line: ParsedLogLine): string {
++  const d = line.time;
++  const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
++  const time = `${date} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
++  const parts = [
++    ansi('90', time),
++    ansi(SEVERITY_STYLE[line.severity], line.severity.toUpperCase().padEnd(5)),
++    ansi('90', line.source.padEnd(7)),
++    line.message,
++    ...line.fields.map(([key, value]) =>
++      key === 'error' ? ansi('31', `${key}=${value}`) : `${key}=${value}`
++    ),
++  ];
++  if (line.location) {
++    parts.push(ansi('90', line.location));
++  }
++  return parts.filter(part => part !== '').join(' ') + '\n';
++}
++
++/**
++ * Settings → Logs: what the desktop app and its backend logged since the app
++ * started, read from the main process every two seconds while the page is open.
++ */
++export default function AppLogs() {
++  const { t } = useTranslation(['translation']);
++  const [entries, setEntries] = useState<AppLogEntry[]>([]);
++  const [severities, setSeverities] = useState<LogSeverity[]>(ALL_SEVERITIES);
++  const getAppLogs: ((afterSeq: number) => Promise<AppLogEntry[]>) | undefined =
++    window.desktopApi?.getAppLogs;
++
++  useEffect(() => {
++    if (!getAppLogs) {
++      return;
++    }
++    let active = true;
++    let lastSeq = 0;
++    let timer: ReturnType<typeof setTimeout> | undefined;
++
++    // Each poll starts after the previous one ends, so two never ask for the
++    // same lines.
++    async function poll() {
++      try {
++        const newer = await getAppLogs!(lastSeq);
++        if (active && newer.length > 0) {
++          lastSeq = newer[newer.length - 1].seq;
++          setEntries(current => current.concat(newer).slice(-MAX_LINES));
++        }
++      } catch (err) {
++        console.error('Failed to read the app logs:', err);
++      }
++      if (active) {
++        timer = setTimeout(poll, POLL_INTERVAL_MS);
++      }
++    }
++    poll();
++
++    return () => {
++      active = false;
++      clearTimeout(timer);
++    };
++  }, [getAppLogs]);
++
++  const lines = useMemo(() => entries.map(parseLogEntry), [entries]);
++  const logs = useMemo(
++    () => lines.filter(line => severities.includes(line.severity)).map(formatLogLine),
++    [lines, severities]
++  );
++
++  const severityFilter = (
++    <FormControl key="severity" sx={{ minWidth: '9rem' }}>
++      <InputLabel shrink id="app-logs-severity-label">
++        {t('translation|Severity')}
++      </InputLabel>
++      <Select
++        labelId="app-logs-severity-label"
++        id="app-logs-severity"
++        multiple
++        size="small"
++        value={severities}
++        onChange={event => {
++          const value = event.target.value as LogSeverity[];
++          if (value.length > 0) {
++            setSeverities(value);
++          }
++        }}
++        renderValue={selected =>
++          selected.length === ALL_SEVERITIES.length
++            ? t('translation|All')
++            : (selected as LogSeverity[]).map(s => s.toUpperCase()).join(', ')
++        }
++      >
++        {ALL_SEVERITIES.map(severity => (
++          <MenuItem key={severity} value={severity}>
++            <Checkbox checked={severities.includes(severity)} size="small" />
++            <ListItemText primary={severity.toUpperCase()} />
++          </MenuItem>
++        ))}
++      </Select>
++    </FormControl>
++  );
++
++  return (
++    <SectionBox title={t('translation|Logs')} backLink>
++      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
++        {t(
++          "translation|What the app and its backend logged since the app started. The app keeps these lines in memory only, and leaves out the backend's per-request timing lines."
++        )}
++      </Typography>
++      <Box
++        sx={{
++          height: 'calc(100vh - 17rem)',
++          minHeight: '24rem',
++          display: 'flex',
++          // The viewer is laid out for a dialog: 80% of its height, with padding.
++          '& > .MuiDialogContent-root': { height: '100%', padding: 0 },
++        }}
++      >
++        <LogViewer
++          noDialog
++          open
++          title={t('translation|Logs')}
++          downloadName="k3dlamp-logs"
++          logs={logs}
++          topActions={[severityFilter]}
++          onClose={() => {}}
++        />
++      </Box>
++    </SectionBox>
++  );
++}
+diff --git a/frontend/src/components/Sidebar/useSidebarItems.tsx b/frontend/src/components/Sidebar/useSidebarItems.tsx
+index 17ec152..98591b7 100644
+--- a/frontend/src/components/Sidebar/useSidebarItems.tsx
++++ b/frontend/src/components/Sidebar/useSidebarItems.tsx
+@@ -232,6 +232,12 @@ export const useSidebarItems = (sidebarName: string = DefaultSidebars.IN_CLUSTER
+             url: '/settings/updates',
+             hide: !isElectron(),
+           },
++          {
++            name: 'settingsLogs',
++            label: t('translation|Logs'),
++            url: '/settings/logs',
++            hide: !isElectron(),
++          },
+         ],
+       },
+     ];
+diff --git a/frontend/src/components/common/LogViewer.tsx b/frontend/src/components/common/LogViewer.tsx
+index 082abed..95c7a57 100644
+--- a/frontend/src/components/common/LogViewer.tsx
++++ b/frontend/src/components/common/LogViewer.tsx
+@@ -33,6 +33,10 @@ import ActionButton from './ActionButton';
+ import { Dialog, DialogProps } from './Dialog';
+ import { getXtermTheme } from './xtermTheme';
+ 
++// ANSI escape sequences that set colours and text styles, as in `\x1b[1;31m`.
++// eslint-disable-next-line no-control-regex
++const ANSI_SGR = /\x1b\[[\d;]*m/g;
++
+ export interface LogViewerProps extends DialogProps {
+   logs: string[];
+   title?: string;
+@@ -85,7 +89,11 @@ export function LogViewer(props: LogViewerProps) {
+     const time = new Date().toISOString().replace(/:/g, '-').slice(0, -5);
+ 
+     const element = document.createElement('a');
+-    const file = new Blob(logs, { type: 'text/plain' });
++    // Colours are for the terminal. The file gets plain text.
++    const file = new Blob(
++      logs.map(line => line.replace(ANSI_SGR, '')),
++      { type: 'text/plain' }
++    );
+     element.href = URL.createObjectURL(file);
+     element.download = `${downloadName}_${time}.txt`;
+     // Required for FireFox
+diff --git a/frontend/src/components/common/LogViewerCopy.test.tsx b/frontend/src/components/common/LogViewerCopy.test.tsx
+index a78c419..f7fc2d7 100644
+--- a/frontend/src/components/common/LogViewerCopy.test.tsx
++++ b/frontend/src/components/common/LogViewerCopy.test.tsx
+@@ -219,3 +219,34 @@ describe('LogViewer copy action', () => {
+     });
+   });
+ });
++
++describe('LogViewer download action', () => {
++  it('saves the lines without their colour codes', async () => {
++    const createObjectURL = vi.fn().mockReturnValue('blob:logs');
++    Object.assign(URL, { createObjectURL });
++    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
++
++    render(
++      <TestContext>
++        <LogViewer
++          open
++          logs={['\x1b[1;31mERROR\x1b[0m failed\n', 'plain\n']}
++          title="test-pod"
++          onClose={() => {}}
++          noDialog
++        />
++      </TestContext>
++    );
++    await userEvent.click(screen.getByRole('button', { name: 'Download' }));
++
++    expect(click).toHaveBeenCalledOnce();
++    // jsdom's Blob has no text(), but FileReader can read it.
++    const text = await new Promise<string>(resolve => {
++      const reader = new FileReader();
++      reader.onload = () => resolve(reader.result as string);
++      reader.readAsText(createObjectURL.mock.calls[0][0]);
++    });
++    expect(text).toBe('ERROR failed\nplain\n');
++    click.mockRestore();
++  });
++});
+diff --git a/frontend/src/lib/router/index.tsx b/frontend/src/lib/router/index.tsx
+index b01df50..5728404 100644
+--- a/frontend/src/lib/router/index.tsx
++++ b/frontend/src/lib/router/index.tsx
+@@ -24,6 +24,7 @@ import NotificationList from '../../components/App/Notifications/List';
+ import PluginSettings from '../../components/App/PluginSettings';
+ import PluginSettingsDetails from '../../components/App/PluginSettings/PluginSettingsDetails';
+ import Settings from '../../components/App/Settings';
++import AppLogs from '../../components/App/Settings/AppLogs';
+ import SettingsCluster from '../../components/App/Settings/SettingsCluster';
+ import SettingsClusters from '../../components/App/Settings/SettingsClusters';
+ import UpdateSettings from '../../components/App/Settings/UpdateSettings';
+@@ -1119,6 +1120,22 @@ const defaultRoutes: { [routeName: string]: Route } = {
+       </PageGrid>
+     ),
+   },
++  settingsLogs: {
++    path: '/settings/logs',
++    exact: true,
++    name: 'Logs',
++    sidebar: {
++      item: 'settingsLogs',
++      sidebar: DefaultSidebars.HOME,
++    },
++    useClusterURL: false,
++    noAuthRequired: true,
++    component: () => (
++      <PageGrid>
++        <AppLogs />
++      </PageGrid>
++    ),
++  },
+   // DISABLED UNTIL DATA HOOK UP
+   plugins: {
+     path: '/settings/plugins',
