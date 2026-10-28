@@ -1,6 +1,6 @@
 # k3dlamp
 
-A Headlamp Desktop build that creates and operates k3d and kind clusters. It is upstream Headlamp, built from a pinned release with this repository's product manifest, bitswalk branding and six patches. The manifest lets the [k3d plugin](https://github.com/bitswalk/k3dlamp-k3d-plugin) and the [kind plugin](https://github.com/bitswalk/k3dlamp-kind-plugin), which users install from Artifact Hub, run k3d and kind.
+A Headlamp Desktop build that creates and operates k3d and kind clusters. It is upstream Headlamp, built from a pinned release with this repository's product manifest, bitswalk branding and seven patches. The manifest lets the [k3d plugin](https://github.com/bitswalk/k3dlamp-k3d-plugin) and the [kind plugin](https://github.com/bitswalk/k3dlamp-kind-plugin), which users install from Artifact Hub, run k3d and kind.
 
 Open **k3d** in the sidebar and click **Add cluster** for a cluster with one k3s server, or **Custom cluster** to write or upload a k3d config first. The cluster appears in the cluster list as `k3d-<name>`, ready to browse like any other cluster. The kind plugin's **kind** page works the same way, for clusters that appear as `kind-<name>`.
 
@@ -40,7 +40,7 @@ curl -fsSL https://github.com/bitswalk/k3dlamp/releases/latest/download/install.
 
 ## How it differs from Headlamp
 
-The build makes three kinds of change. Branding replaces Headlamp's logo, icons, colours and name in the UI; see [Branding](#branding). Patches add the **Settings → Updates** page, fix the collapsed sidebar's cluster version and icon alignment, let the plugins hand k3d and kind a cluster config on standard input, keep **Settings → Plugins** from abandoning a plugin delete, and lock the kubeconfig the way kind and kubectl expect; see [Patches](#patches). Everything else comes from [`app-build-manifest.json`](app-build-manifest.json), which Headlamp's build selects with `HEADLAMP_BUILD_MANIFEST`:
+The build makes three kinds of change. Branding replaces Headlamp's logo, icons, colours and name in the UI; see [Branding](#branding). Patches add the **Settings → Updates** page, fix the collapsed sidebar's cluster version and icon alignment, let the plugins hand k3d and kind a cluster config on standard input, keep **Settings → Plugins** from abandoning a plugin delete, lock the kubeconfig the way kind and kubectl expect, and let the App Catalog install charts from OCI registries; see [Patches](#patches). Everything else comes from [`app-build-manifest.json`](app-build-manifest.json), which Headlamp's build selects with `HEADLAMP_BUILD_MANIFEST`:
 
 | Setting | Effect |
 | --- | --- |
@@ -67,7 +67,7 @@ The grants need Headlamp's `runCommands`, which first shipped in v0.46.0. `build
 
 The manifest ships two plugins, each a release checked against its SHA-256 and package name:
 
-- **App Catalog 0.9.1** browses Helm charts and installs them into the current cluster, through the Helm support Headlamp's desktop backend turns on. Besides Artifact Hub, it lists the charts of any Helm repository that a cluster advertises with a Service labelled `catalog.headlamp.dev/is-catalog`.
+- **App Catalog 0.9.1** browses Helm charts and installs them into the current cluster, through the Helm support Headlamp's desktop backend turns on. Besides Artifact Hub, it lists the charts of any Helm repository that a cluster advertises with a Service labelled `catalog.headlamp.dev/is-catalog`. With `0007-helm-oci-repositories.patch` it also installs charts that Artifact Hub lists only in an OCI registry, such as the kubevirt-stack charts.
 - **Plugin Catalog 0.4.5** installs plugins, the k3d plugin among them, from Artifact Hub. Earlier releases fetched only the first 60 Artifact Hub packages, which hid the k3d plugin.
 
 ## Build and test
@@ -157,6 +157,7 @@ docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD/branding:/brand
 | `0004-run-command-input.patch` | Lets a plugin send standard input to a command the manifest grants it: `input`, a string of at most 1 MiB, is the only option such a command takes. The k3d plugin sends its cluster config this way, to `k3d cluster create --config -`. Consent and grants still cover only the command and its arguments, so a granted `create` takes any config the plugin sends |
 | `0005-plugin-delete-before-save.patch` | Keeps **Settings → Plugins** from offering **Save & Apply** for a plugin delete, and disables it while any delete runs. The delete waits out a 5-second cancellation window before it reaches the backend, and saving reloads the page, so saving in that window abandoned the delete. A successful delete reloads the page itself |
 | `0006-kubeconfig-lock-file.patch` | Locks the kubeconfig the way client-go, kubectl and kind do: by creating `~/.kube/config.lock` exclusively, waiting while another program holds it, and removing it when done. Headlamp held an `flock` on that file instead and left it behind, so after Headlamp's first kubeconfig edit kind created clusters but failed to add them to the kubeconfig |
+| `0007-helm-oci-repositories.patch` | Lets the App Catalog install a chart whose Artifact Hub repository URL is `oci://`, such as `oci://ghcr.io/naval-group/kubevirt-stack-charts/kubevirt`. Adding such a repository failed with a 500, because Headlamp downloaded every repository's index and an OCI registry has none. Headlamp now records an `oci://` repository without an index. Install and upgrade pull `<repo>/<chart>` from the registry, signing in with the credentials `helm registry login` saves. The upgrade dialog lists versions only from indexes, so it offers none for these charts |
 
 To change a patch, apply them all to a checkout of the pinned tag, edit, and write each one back with `git diff`. Keep the description lines at the top of the file. A new UI string goes into `translations.json` for every language. Languages Headlamp itself barely translates, currently Hebrew, Hindi and both Portuguese variants, get empty strings, so they fall back to English like the rest of their UI.
 

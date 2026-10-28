@@ -1,0 +1,451 @@
+helm: install charts from OCI repositories.
+Artifact Hub lists a chart that is only in an OCI registry with an oci://
+repository URL, such as oci://ghcr.io/naval-group/kubevirt-stack-charts/kubevirt.
+The App Catalog adds that repository, then installs <repo>/<chart>. Adding it
+failed with a 500, "failed to perform FetchReference on source: invalid
+reference", because Headlamp downloaded every repository's index and an OCI
+registry has none. Headlamp now records an oci:// repository without an index.
+Install and upgrade pull <repo>/<chart> from it by the chart's oci://
+reference, with a registry client that reads `helm registry login`
+credentials. The chart list, which reads indexes, leaves such repositories out.
+
+diff --git a/backend/pkg/helm/charts.go b/backend/pkg/helm/charts.go
+index c139744..ed3ecbf 100644
+--- a/backend/pkg/helm/charts.go
++++ b/backend/pkg/helm/charts.go
+@@ -28,6 +28,7 @@ import (
+ 	"helm.sh/helm/v3/cmd/helm/search"
+ 	"helm.sh/helm/v3/pkg/cli"
+ 	"helm.sh/helm/v3/pkg/helmpath"
++	"helm.sh/helm/v3/pkg/registry"
+ 	"helm.sh/helm/v3/pkg/repo"
+ )
+ 
+@@ -53,6 +54,11 @@ func listCharts(filter string, settings *cli.EnvSettings) ([]chartInfo, error) {
+ 	var chartInfos []chartInfo
+ 
+ 	for _, re := range repoFile.Repositories {
++		// An OCI repository has no index to list charts from.
++		if registry.IsOCI(re.URL) {
++			continue
++		}
++
+ 		index := search.NewIndex()
+ 
+ 		name := re.Name
+diff --git a/backend/pkg/helm/release.go b/backend/pkg/helm/release.go
+index 6a82691..728d9e8 100644
+--- a/backend/pkg/helm/release.go
++++ b/backend/pkg/helm/release.go
+@@ -36,6 +36,7 @@ import (
+ 	"helm.sh/helm/v3/pkg/cli"
+ 	"helm.sh/helm/v3/pkg/downloader"
+ 	"helm.sh/helm/v3/pkg/getter"
++	"helm.sh/helm/v3/pkg/registry"
+ 	"helm.sh/helm/v3/pkg/release"
+ 	"helm.sh/helm/v3/pkg/storage/driver"
+ 	authv1 "k8s.io/api/authentication/v1"
+@@ -633,6 +634,29 @@ func (h *Handler) InstallRelease(clientConfig clientcmd.ClientConfig, w http.Res
+ 	h.returnResponse(w, req.Name, http.StatusAccepted, "install request accepted")
+ }
+ 
++// resolveChart returns the reference to pull for the chart a request names, and
++// the registry client to pull it with if it's in an OCI registry: an oci://
++// chart, or <repo>/<chart> in an oci:// repository. Any other chart comes back
++// as it is, without a client.
++func resolveChart(reqChart string, settings *cli.EnvSettings) (string, *registry.Client, error) {
++	ref := reqChart
++	if ociRef, ok := ociRepoChart(reqChart, settings); ok {
++		ref = ociRef
++	}
++
++	if !registry.IsOCI(ref) {
++		return ref, nil, nil
++	}
++
++	// The credentials file is where `helm registry login` saves them.
++	client, err := registry.NewClient(
++		registry.ClientOptCredentialsFile(settings.RegistryConfig),
++		registry.ClientOptEnableCache(true),
++	)
++
++	return ref, client, err
++}
++
+ // Returns the chart, and err, and if dependencyUpdate is true then we also update the chart dependencies.
+ func (h *Handler) getChart(
+ 	actionName string,
+@@ -741,7 +765,17 @@ func (h *Handler) installRelease(req InstallRequest, actionConfig *action.Config
+ 		return
+ 	}
+ 
+-	chart, err := h.getChart("install", req.Chart, req.Name,
++	chartRef, registryClient, err := resolveChart(req.Chart, h.EnvSettings)
++	if err != nil {
++		h.logActionState(zlog.Error(), err, "install", req.Chart, req.Name, failed, "creating registry client")
++		return
++	}
++
++	if registryClient != nil {
++		installClient.SetRegistryClient(registryClient)
++	}
++
++	chart, err := h.getChart("install", chartRef, req.Name,
+ 		installClient.ChartPathOptions, req.DependencyUpdate, h.EnvSettings)
+ 	if err != nil {
+ 		logger.Log(logger.LevelError, map[string]string{logFieldChart: req.Chart, logFieldReleaseName: req.Name},
+@@ -862,7 +896,17 @@ func (h *Handler) upgradeRelease(req UpgradeReleaseRequest, actionConfig *action
+ 	upgradeClient.Description = req.Description
+ 	upgradeClient.Version = req.Version
+ 
+-	chart, err := h.getChart("upgrade", req.Chart, req.Name, upgradeClient.ChartPathOptions, true, h.EnvSettings)
++	chartRef, registryClient, err := resolveChart(req.Chart, h.EnvSettings)
++	if err != nil {
++		h.logActionState(zlog.Error(), err, "upgrade", req.Chart, req.Name, failed, "creating registry client")
++		return
++	}
++
++	if registryClient != nil {
++		upgradeClient.SetRegistryClient(registryClient)
++	}
++
++	chart, err := h.getChart("upgrade", chartRef, req.Name, upgradeClient.ChartPathOptions, true, h.EnvSettings)
+ 	if err != nil {
+ 		logger.Log(logger.LevelError, map[string]string{logFieldChart: req.Chart, logFieldReleaseName: req.Name},
+ 			err, "getting chart")
+diff --git a/backend/pkg/helm/repository.go b/backend/pkg/helm/repository.go
+index 1eea096..a575e1c 100644
+--- a/backend/pkg/helm/repository.go
++++ b/backend/pkg/helm/repository.go
+@@ -23,6 +23,7 @@ import (
+ 	"errors"
+ 	"net/http"
+ 	"os"
++	"path"
+ 	"path/filepath"
+ 	"strings"
+ 	"time"
+@@ -32,6 +33,7 @@ import (
+ 
+ 	"helm.sh/helm/v3/pkg/cli"
+ 	"helm.sh/helm/v3/pkg/getter"
++	"helm.sh/helm/v3/pkg/registry"
+ 	"helm.sh/helm/v3/pkg/repo"
+ )
+ 
+@@ -136,8 +138,26 @@ func applyRequestFields(entry *repo.Entry, request AddUpdateRepoRequest) {
+ 	}
+ }
+ 
++func downloadIndexFile(entry *repo.Entry, settings *cli.EnvSettings) error {
++	r, err := repo.NewChartRepository(entry, getter.All(settings))
++	if err != nil {
++		logger.Log(logger.LevelError, nil, err, "creating chart repository")
++		return err
++	}
++
++	_, err = r.DownloadIndexFile()
++	if err != nil {
++		logger.Log(logger.LevelError, nil, err, "downloading index file")
++		return err
++	}
++
++	return nil
++}
++
+ // addRepository adds a repository with the given request fields to the helm config.
+ // Returns an error if the repository cannot be created or its index downloaded.
++// An OCI registry has no index, so an oci:// repository is only recorded: Helm
++// pulls its chart from the registry at install time. See ociRepoChart.
+ func addRepository(request AddUpdateRepoRequest, settings *cli.EnvSettings) error {
+ 	err := createFileIfNotThere(settings.RepositoryConfig)
+ 	if err != nil {
+@@ -181,16 +201,10 @@ func addRepository(request AddUpdateRepoRequest, settings *cli.EnvSettings) erro
+ 
+ 	applyRequestFields(newRepo, request)
+ 
+-	r, err := repo.NewChartRepository(newRepo, getter.All(settings))
+-	if err != nil {
+-		logger.Log(logger.LevelError, nil, err, "creating chart repository")
+-		return err
+-	}
+-
+-	_, err = r.DownloadIndexFile()
+-	if err != nil {
+-		logger.Log(logger.LevelError, nil, err, "downloading index file")
+-		return err
++	if !registry.IsOCI(newRepo.URL) {
++		if err = downloadIndexFile(newRepo, settings); err != nil {
++			return err
++		}
+ 	}
+ 
+ 	repoFile.Update(newRepo)
+@@ -204,6 +218,38 @@ func addRepository(request AddUpdateRepoRequest, settings *cli.EnvSettings) erro
+ 	return nil
+ }
+ 
++// ociRepoChart returns the oci:// reference of a <repo>/<chart> name whose
++// repository is an OCI registry, and false for any other name. Helm looks
++// <repo>/<chart> up in the repository's index, which an OCI registry doesn't
++// have, so an install must pull the chart by this reference instead.
++func ociRepoChart(name string, settings *cli.EnvSettings) (string, bool) {
++	repoName, chartName, ok := strings.Cut(name, "/")
++	if !ok {
++		return "", false
++	}
++
++	// A repositories file Helm can't read is left for Helm to report.
++	repoFile, err := repo.LoadFile(settings.RepositoryConfig)
++	if err != nil {
++		return "", false
++	}
++
++	entry := repoFile.Get(repoName)
++	if entry == nil || !registry.IsOCI(entry.URL) {
++		return "", false
++	}
++
++	// Artifact Hub lists an OCI repository by its chart's own reference, as in
++	// oci://ghcr.io/org/charts/<chart>. Any other URL is a registry namespace
++	// that holds the chart.
++	ref := strings.TrimSuffix(entry.URL, "/")
++	if path.Base(ref) != chartName {
++		ref += "/" + chartName
++	}
++
++	return ref, true
++}
++
+ func (h *Handler) AddRepo(w http.ResponseWriter, r *http.Request) {
+ 	var request AddUpdateRepoRequest
+ 
+diff --git a/backend/pkg/helm/repository_oci_internal_test.go b/backend/pkg/helm/repository_oci_internal_test.go
+new file mode 100644
+index 0000000..f62f570
+--- /dev/null
++++ b/backend/pkg/helm/repository_oci_internal_test.go
+@@ -0,0 +1,223 @@
++package helm
++
++import (
++	"crypto/sha256"
++	"encoding/hex"
++	"encoding/json"
++	"net/http"
++	"net/http/httptest"
++	"net/url"
++	"os"
++	"path/filepath"
++	"strconv"
++	"sync/atomic"
++	"testing"
++
++	"github.com/kubernetes-sigs/headlamp/backend/pkg/cache"
++	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++	"helm.sh/helm/v3/pkg/action"
++	"helm.sh/helm/v3/pkg/chart"
++	"helm.sh/helm/v3/pkg/chartutil"
++	"helm.sh/helm/v3/pkg/cli"
++	"helm.sh/helm/v3/pkg/helmpath"
++	"helm.sh/helm/v3/pkg/registry"
++	"helm.sh/helm/v3/pkg/repo"
++)
++
++func newOCITestSettings(t *testing.T) *cli.EnvSettings {
++	t.Helper()
++
++	dir := t.TempDir()
++	settings := cli.New()
++	settings.RepositoryConfig = filepath.Join(dir, "repositories.yaml")
++	settings.RepositoryCache = filepath.Join(dir, "cache")
++	settings.RegistryConfig = filepath.Join(dir, "registry", "config.json")
++
++	return settings
++}
++
++func sha256Digest(b []byte) string {
++	sum := sha256.Sum256(b)
++	return "sha256:" + hex.EncodeToString(sum[:])
++}
++
++const ocispecManifest = "application/vnd.oci.image.manifest.v1+json"
++
++type ociContent struct {
++	body      []byte
++	mediaType string
++}
++
++// ociChartContent returns what an OCI registry serves for ch, pushed as the
++// repository name at the chart's version tag, by request path.
++func ociChartContent(t *testing.T, name string, ch *chart.Chart) map[string]ociContent {
++	t.Helper()
++
++	archivePath, err := chartutil.Save(ch, t.TempDir())
++	require.NoError(t, err)
++
++	layer, err := os.ReadFile(archivePath) //nolint:gosec // the test's own temp file
++	require.NoError(t, err)
++
++	config, err := json.Marshal(ch.Metadata)
++	require.NoError(t, err)
++
++	manifest, err := json.Marshal(map[string]any{
++		"schemaVersion": 2,
++		"mediaType":     ocispecManifest,
++		"config": map[string]any{
++			"mediaType": registry.ConfigMediaType, "digest": sha256Digest(config), "size": len(config),
++		},
++		"layers": []map[string]any{{
++			"mediaType": registry.ChartLayerMediaType, "digest": sha256Digest(layer), "size": len(layer),
++		}},
++	})
++	require.NoError(t, err)
++
++	repository := "/v2/" + name
++
++	return map[string]ociContent{
++		"/v2/": {[]byte("{}"), "application/json"},
++		repository + "/manifests/" + ch.Metadata.Version:    {manifest, ocispecManifest},
++		repository + "/manifests/" + sha256Digest(manifest): {manifest, ocispecManifest},
++		repository + "/blobs/" + sha256Digest(config):       {config, "application/octet-stream"},
++		repository + "/blobs/" + sha256Digest(layer):        {layer, "application/octet-stream"},
++	}
++}
++
++// serveOCIChart serves ch from a read-only OCI registry over TLS, and counts
++// the requests it gets. The registry client trusts it because the test swaps
++// http.DefaultTransport, which the client copies, so the test must not run in
++// parallel.
++func serveOCIChart(t *testing.T, name string, ch *chart.Chart) (*httptest.Server, *atomic.Int32) {
++	t.Helper()
++
++	content := ociChartContent(t, name, ch)
++
++	var requests atomic.Int32
++
++	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		requests.Add(1)
++
++		c, ok := content[r.URL.Path]
++		if !ok {
++			http.NotFound(w, r)
++			return
++		}
++
++		w.Header().Set("Content-Type", c.mediaType)
++		w.Header().Set("Content-Length", strconv.Itoa(len(c.body)))
++		w.Header().Set("Docker-Content-Digest", sha256Digest(c.body))
++
++		if r.Method != http.MethodHead {
++			_, _ = w.Write(c.body)
++		}
++	}))
++	t.Cleanup(server.Close)
++
++	defaultTransport := http.DefaultTransport
++	http.DefaultTransport = server.Client().Transport
++
++	t.Cleanup(func() { http.DefaultTransport = defaultTransport })
++
++	return server, &requests
++}
++
++// The App Catalog adds an Artifact Hub package's repository, then installs
++// <repo>/<chart>. For an OCI repository, adding it must not look for an index,
++// and installing must pull the chart from the registry.
++func TestInstallFromOCIRepository(t *testing.T) {
++	settings := newOCITestSettings(t)
++	kubevirt := &chart.Chart{Metadata: &chart.Metadata{
++		APIVersion: chart.APIVersionV2, Name: "kubevirt", Version: "0.3.0", Type: "application",
++	}}
++
++	server, requests := serveOCIChart(t, "naval-group/kubevirt-stack-charts/kubevirt", kubevirt)
++	serverURL, err := url.Parse(server.URL)
++	require.NoError(t, err)
++
++	repoURL := "oci://" + serverURL.Host + "/naval-group/kubevirt-stack-charts/kubevirt"
++
++	require.NoError(t, addRepository(AddUpdateRepoRequest{Name: "kubevirt", URL: repoURL}, settings))
++	assert.Zero(t, requests.Load(), "adding an OCI repository contacted the registry")
++	assert.NoFileExists(t, filepath.Join(settings.RepositoryCache, helmpath.CacheIndexFile("kubevirt")))
++
++	repositories, err := listRepositories(settings)
++	require.NoError(t, err)
++	assert.Contains(t, repositories, repositoryInfo{Name: "kubevirt", URL: repoURL})
++
++	chartRef, registryClient, err := resolveChart("kubevirt/kubevirt", settings)
++	require.NoError(t, err)
++	assert.Equal(t, repoURL, chartRef)
++	require.NotNil(t, registryClient)
++
++	installClient := action.NewInstall(&action.Configuration{})
++	installClient.Version = "0.3.0"
++	installClient.SetRegistryClient(registryClient)
++
++	h := &Handler{Cache: cache.New[interface{}](), EnvSettings: settings}
++
++	pulled, err := h.getChart("install", chartRef, "kubevirt", installClient.ChartPathOptions, false, settings)
++	require.NoError(t, err)
++	assert.Equal(t, "kubevirt", pulled.Metadata.Name)
++	assert.Equal(t, "0.3.0", pulled.Metadata.Version)
++}
++
++func TestResolveChart(t *testing.T) {
++	settings := newOCITestSettings(t)
++	repoFile := repo.NewFile()
++	repoFile.Update(
++		&repo.Entry{Name: "kubevirt", URL: "oci://ghcr.io/naval-group/kubevirt-stack-charts/kubevirt"},
++		&repo.Entry{Name: "stack", URL: "oci://ghcr.io/naval-group/kubevirt-stack-charts/"},
++		&repo.Entry{Name: "cnpg", URL: "https://cloudnative-pg.github.io/charts"},
++	)
++	require.NoError(t, repoFile.WriteFile(settings.RepositoryConfig, defaultNewConfigFileMode))
++
++	tests := []struct {
++		chart, want string
++		client      bool
++	}{
++		// Artifact Hub's OCI repository URLs already end in the chart's name.
++		{"kubevirt/kubevirt", "oci://ghcr.io/naval-group/kubevirt-stack-charts/kubevirt", true},
++		{"stack/cdi", "oci://ghcr.io/naval-group/kubevirt-stack-charts/cdi", true},
++		{"oci://ghcr.io/org/charts/app", "oci://ghcr.io/org/charts/app", true},
++		{"cnpg/cloudnative-pg", "cnpg/cloudnative-pg", false},
++		{"missing/chart", "missing/chart", false},
++		{"/charts/local", "/charts/local", false},
++	}
++
++	for _, tt := range tests {
++		t.Run(tt.chart, func(t *testing.T) {
++			ref, client, err := resolveChart(tt.chart, settings)
++			require.NoError(t, err)
++			assert.Equal(t, tt.want, ref)
++			assert.Equal(t, tt.client, client != nil)
++		})
++	}
++}
++
++// An OCI repository has no index, which must not stop the other repositories'
++// charts from being listed.
++func TestListChartsSkipsOCIRepositories(t *testing.T) {
++	settings := newOCITestSettings(t)
++	repoFile := repo.NewFile()
++	repoFile.Update(
++		&repo.Entry{Name: "kubevirt", URL: "oci://ghcr.io/naval-group/kubevirt-stack-charts/kubevirt"},
++		&repo.Entry{Name: "cnpg", URL: "https://cloudnative-pg.github.io/charts"},
++	)
++	require.NoError(t, repoFile.WriteFile(settings.RepositoryConfig, defaultNewConfigFileMode))
++
++	index := repo.NewIndexFile()
++	require.NoError(t, index.MustAdd(&chart.Metadata{
++		APIVersion: chart.APIVersionV2, Name: "cloudnative-pg", Version: "0.29.1",
++	}, "cloudnative-pg-0.29.1.tgz", "https://cloudnative-pg.github.io/charts", "sha256:0"))
++	require.NoError(t, os.MkdirAll(settings.RepositoryCache, defaultNewConfigFolderMode))
++	require.NoError(t, index.WriteFile(
++		filepath.Join(settings.RepositoryCache, helmpath.CacheIndexFile("cnpg")), defaultNewConfigFileMode))
++
++	charts, err := listCharts("", settings)
++	require.NoError(t, err)
++	require.Len(t, charts, 1)
++	assert.Equal(t, "cnpg/cloudnative-pg", charts[0].Name)
++}
